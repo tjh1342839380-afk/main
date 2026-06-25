@@ -31,7 +31,7 @@ html {
 }
 
 body {
-  background: #111827 url('/page-background-kushiro-sunset.png') center / cover fixed no-repeat;
+  background: #111827 url('/wallpapers/static/page-background-kushiro-sunset.png') center / cover fixed no-repeat;
   padding: 0;
   -webkit-user-select: none;
   user-select: none;

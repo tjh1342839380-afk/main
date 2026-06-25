@@ -24,9 +24,9 @@ import { useGlobalClickSuppression } from './lib/clickSuppression'
 
 let customProviderConfigUrlImportStarted = false
 const DYNAMIC_BACKGROUND_STORAGE_KEY = 'gpt-image-playground:dynamic-background-enabled'
-const STATIC_BACKGROUND_MANIFEST_URL = '/background-wallpapers.json'
-const DEFAULT_DYNAMIC_BACKGROUND_URL = '/page-background.mp4'
-const DEFAULT_STATIC_BACKGROUND_URL = '/page-background-kushiro-sunset.png'
+const STATIC_BACKGROUND_MANIFEST_URL = '/wallpapers/background-wallpapers.json'
+const DEFAULT_DYNAMIC_BACKGROUND_URL = '/wallpapers/dynamic/page-background.mp4'
+const DEFAULT_STATIC_BACKGROUND_URL = '/wallpapers/static/page-background-kushiro-sunset.png'
 const DAY_MS = 24 * 60 * 60 * 1000
 
 function getInitialDynamicBackgroundEnabled() {
