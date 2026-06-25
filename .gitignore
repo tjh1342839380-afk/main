@@ -3,4 +3,5 @@ dist/
 .env.local
 dev-proxy.config.json
 debug/
+public/page-background.mp4
 .wrangler/
