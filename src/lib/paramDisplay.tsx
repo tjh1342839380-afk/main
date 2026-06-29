@@ -15,14 +15,17 @@ interface ActualValueBadgeProps {
   value: string
   className?: string
   variant?: 'highlight' | 'normal'
+  tooltip?: string
+  cursor?: 'help' | 'default'
 }
 
-export function ActualValueBadge({ value, className = '', variant = 'highlight' }: ActualValueBadgeProps) {
+export function ActualValueBadge({ value, className = '', variant = 'highlight', tooltip = 'API 实际响应值', cursor = 'help' }: ActualValueBadgeProps) {
   const [tooltipVisible, setTooltipVisible] = useState(false)
   const touchTimerRef = useRef<number | null>(null)
   const colorClass = variant === 'normal'
     ? 'bg-gray-100 text-gray-500 dark:bg-white/[0.04] dark:text-gray-400'
     : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-500/20 dark:text-yellow-300'
+  const cursorClass = cursor === 'default' ? 'cursor-default' : 'cursor-help'
 
   useEffect(() => () => {
     if (touchTimerRef.current != null) window.clearTimeout(touchTimerRef.current)
@@ -37,7 +40,7 @@ export function ActualValueBadge({ value, className = '', variant = 'highlight' 
 
   return (
     <span
-      className={`relative inline-flex cursor-help ${colorClass} ${className}`}
+      className={`relative inline-flex ${cursorClass} ${colorClass} ${className}`}
       role="button"
       tabIndex={0}
       onMouseEnter={() => setTooltipVisible(true)}
@@ -57,7 +60,7 @@ export function ActualValueBadge({ value, className = '', variant = 'highlight' 
     >
       {value}
       <ViewportTooltip visible={tooltipVisible} className="whitespace-nowrap">
-        API 实际响应值
+        {tooltip}
       </ViewportTooltip>
     </span>
   )

@@ -11,9 +11,31 @@ import { dismissAllTooltips } from '../lib/tooltipDismiss'
 import { downloadImageEntriesAsZip, downloadImageIds, getImageZipEntries } from '../lib/downloadImages'
 import { isAgentTaskPromptPending } from '../lib/taskPromptDisplay'
 import { replaceImageMentionsForApi } from '../lib/promptImageMentions'
+import { DEFAULT_RESPONSES_MODEL, getAgentTextApiProfile, validateApiProfile } from '../lib/apiProfiles'
+import { callRevisedPromptTranslationApi } from '../lib/agentApi'
 import { CloseIcon, CodeIcon, CopyIcon, DownloadIcon, EditIcon, LinkIcon, TrashIcon } from './icons'
 
 import ViewportTooltip from './ViewportTooltip'
+
+const revisedPromptTranslationCache = new Map<string, string>()
+const revisedPromptTranslationFailures = new Set<string>()
+
+function shouldTranslateRevisedPrompt(text: string) {
+  const latinCount = text.match(/[A-Za-z]/g)?.length ?? 0
+  const chineseCount = text.match(/[\u3400-\u9fff]/g)?.length ?? 0
+  if (latinCount < 16) return false
+  return chineseCount === 0 || latinCount / Math.max(chineseCount, 1) >= 2.5
+}
+
+function getRevisedPromptTranslationProfile(settings: Parameters<typeof getAgentTextApiProfile>[0]) {
+  const profile = getAgentTextApiProfile(settings)
+  if (!profile || profile.provider !== 'openai') return null
+
+  const candidate = profile.apiMode === 'responses'
+    ? profile
+    : { ...profile, apiMode: 'responses' as const, model: DEFAULT_RESPONSES_MODEL, streamImages: false }
+  return validateApiProfile(candidate) ? null : candidate
+}
 
 export default function DetailModal() {
   const tasks = useStore((s) => s.tasks)
@@ -38,6 +60,8 @@ export default function DetailModal() {
   const [showRawUrlsModal, setShowRawUrlsModal] = useState(false)
   const [showRawResponseModal, setShowRawResponseModal] = useState(false)
   const [streamPreviewLoaded, setStreamPreviewLoaded] = useState(false)
+  const [revisedPromptTranslations, setRevisedPromptTranslations] = useState<Record<string, string>>({})
+  const [translatingRevisedPrompt, setTranslatingRevisedPrompt] = useState('')
   const modalRef = useRef<HTMLDivElement>(null)
   const rawUrlsModalRef = useRef<HTMLDivElement>(null)
   const rawResponseModalRef = useRef<HTMLDivElement>(null)
@@ -178,6 +202,16 @@ export default function DetailModal() {
   const currentOutputError = currentOutputSlot?.error || ''
   const currentOriginalOutputImageId = currentOutputImageIndex >= 0 ? task?.transparentOriginalImages?.[currentOutputImageIndex] || '' : ''
   const currentOutputPreviewSrc = currentOutputImageId ? outputPreviewSrcs[currentOutputImageId] || '' : ''
+  const currentRevisedPrompt = currentOutputImageId ? task?.revisedPromptByImage?.[currentOutputImageId]?.trim() ?? '' : ''
+  // 将 @图N 等 mention 标记和透明背景追加提示词都按实际请求内容比较，
+  // 避免仅由本地请求预处理导致的不一致被当作“API 改写”。
+  const requestPrompt = task
+    ? task.transparentOutput && task.transparentPrompt
+      ? task.transparentPrompt
+      : task.prompt
+    : ''
+  const promptSentToApi = task ? replaceImageMentionsForApi(requestPrompt, task.inputImageIds.length).trim() : ''
+  const showRevisedPrompt = Boolean(currentRevisedPrompt && currentRevisedPrompt !== promptSentToApi)
 
   useEffect(() => {
     const outputImageIds = task?.outputImages ?? []
@@ -227,6 +261,61 @@ export default function DetailModal() {
     }
   }, [maskTargetSrc, maskSrc])
 
+  useEffect(() => {
+    if (!showRevisedPrompt || !currentRevisedPrompt || !shouldTranslateRevisedPrompt(currentRevisedPrompt)) {
+      setTranslatingRevisedPrompt('')
+      return
+    }
+
+    const cached = revisedPromptTranslationCache.get(currentRevisedPrompt)
+    if (cached) {
+      setRevisedPromptTranslations((prev) =>
+        prev[currentRevisedPrompt] === cached ? prev : { ...prev, [currentRevisedPrompt]: cached },
+      )
+      setTranslatingRevisedPrompt('')
+      return
+    }
+    if (revisedPromptTranslationFailures.has(currentRevisedPrompt)) {
+      setTranslatingRevisedPrompt('')
+      return
+    }
+
+    const profile = getRevisedPromptTranslationProfile(settings)
+    if (!profile) {
+      setTranslatingRevisedPrompt('')
+      return
+    }
+
+    const controller = new AbortController()
+    setTranslatingRevisedPrompt(currentRevisedPrompt)
+    callRevisedPromptTranslationApi({
+      settings,
+      profile,
+      prompt: currentRevisedPrompt,
+      signal: controller.signal,
+    })
+      .then((text) => {
+        const translated = text.trim()
+        if (!translated) {
+          revisedPromptTranslationFailures.add(currentRevisedPrompt)
+          return
+        }
+        revisedPromptTranslationCache.set(currentRevisedPrompt, translated)
+        setRevisedPromptTranslations((prev) => ({ ...prev, [currentRevisedPrompt]: translated }))
+      })
+      .catch((err) => {
+        if (err instanceof DOMException && err.name === 'AbortError') return
+        revisedPromptTranslationFailures.add(currentRevisedPrompt)
+        console.warn('翻译 revised_prompt 失败', err)
+      })
+      .finally(() => {
+        if (controller.signal.aborted) return
+        setTranslatingRevisedPrompt((value) => value === currentRevisedPrompt ? '' : value)
+      })
+
+    return () => controller.abort()
+  }, [currentRevisedPrompt, settings, showRevisedPrompt])
+
   if (!task) return null
 
   const isAgentTask = task.sourceMode === 'agent' || Boolean(task.agentConversationId || task.agentRoundId)
@@ -243,14 +332,14 @@ export default function DetailModal() {
   const currentActualParams = (baseActualParams?.size || !currentImageSize)
     ? baseActualParams
     : { ...(baseActualParams ?? {}), size: currentImageSize.replace('×', 'x') }
-  const currentRevisedPrompt = currentOutputImageId ? task.revisedPromptByImage?.[currentOutputImageId]?.trim() : ''
-  // 将 @图N 等 mention 标记和透明背景追加提示词都按实际请求内容比较，
-  // 避免仅由本地请求预处理导致的不一致被当作“API 改写”。
-  const requestPrompt = task.transparentOutput && task.transparentPrompt
-    ? task.transparentPrompt
-    : task.prompt
-  const promptSentToApi = replaceImageMentionsForApi(requestPrompt, task.inputImageIds.length).trim()
-  const showRevisedPrompt = Boolean(currentRevisedPrompt && currentRevisedPrompt !== promptSentToApi)
+  const revisedPromptNeedsTranslation = shouldTranslateRevisedPrompt(currentRevisedPrompt)
+  const translatedRevisedPrompt = revisedPromptTranslations[currentRevisedPrompt] ?? revisedPromptTranslationCache.get(currentRevisedPrompt) ?? ''
+  const revisedPromptDisplayValue = revisedPromptNeedsTranslation
+    ? translatedRevisedPrompt || (translatingRevisedPrompt === currentRevisedPrompt ? '正在翻译提示词……' : currentRevisedPrompt)
+    : currentRevisedPrompt
+  const revisedPromptTooltip = revisedPromptNeedsTranslation && translatedRevisedPrompt
+    ? 'API 返回提示词（已翻译）'
+    : 'API 实际响应值'
   const codexCliPromptKey = getCodexCliPromptKey(settings)
   const hasHandledPromptWarning = settings.codexCli || dismissedCodexCliPrompts.includes(codexCliPromptKey)
   const taskProvider = task.apiProvider
@@ -444,21 +533,28 @@ export default function DetailModal() {
       <div className="absolute inset-0 bg-black/20 dark:bg-black/40 backdrop-blur-md animate-overlay-in" />
       <div
         ref={modalRef}
-        className="relative bg-white/90 dark:bg-gray-900/90 backdrop-blur-xl border border-white/50 dark:border-white/[0.08] rounded-3xl shadow-[0_8px_40px_rgb(0,0,0,0.12)] dark:shadow-[0_8px_40px_rgb(0,0,0,0.4)] max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col md:flex-row z-10 ring-1 ring-black/5 dark:ring-white/10 animate-modal-in"
+        className="detail-modal-glass-root relative bg-white/50 dark:bg-gray-900/60 backdrop-blur-xl border border-white/50 dark:border-white/[0.08] rounded-3xl shadow-[0_8px_40px_rgb(0,0,0,0.12)] dark:shadow-[0_8px_40px_rgb(0,0,0,0.4)] max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col md:flex-row z-10 ring-1 ring-black/5 dark:ring-white/10 animate-modal-in"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex h-14 items-center justify-end px-4 md:hidden">
-          <button
-            onClick={() => setDetailTaskId(null)}
-            className="p-1 rounded-full hover:bg-gray-100 dark:hover:bg-white/[0.06] transition text-gray-400"
-            aria-label="关闭"
-          >
-            <CloseIcon className="w-6 h-6" />
-          </button>
-        </div>
+        {(currentOutputPreviewSrc || currentStreamPreviewSrc) && (
+          <img
+            src={currentOutputPreviewSrc || currentStreamPreviewSrc}
+            className="detail-modal-glass-bg"
+            alt=""
+            aria-hidden="true"
+          />
+        )}
+        <div className="detail-modal-glass-scrim" />
+        <button
+          onClick={() => setDetailTaskId(null)}
+          className="detail-modal-close-button absolute right-4 top-4 z-30 flex h-8 w-8 items-center justify-center rounded-full border border-white/55 bg-white/45 text-gray-400 shadow-sm backdrop-blur-xl transition hover:bg-white/70 hover:text-gray-600 dark:border-white/[0.08] dark:bg-white/[0.06] dark:hover:bg-white/[0.1] dark:hover:text-gray-200"
+          aria-label="关闭"
+        >
+          <CloseIcon className="w-5 h-5" />
+        </button>
 
         {/* 左侧：图片 */}
-        <div className="md:w-1/2 w-full h-64 md:h-auto bg-gray-100 dark:bg-black/20 relative flex items-center justify-center flex-shrink-0 min-h-[16rem]">
+        <div className="liquid-glass-detail-image-panel md:w-1/2 w-full h-64 md:h-auto relative flex items-center justify-center flex-shrink-0 min-h-[16rem]">
           {task.status === 'done' && outputLen > 0 && (currentOutputImageId || task.outputImages.length > 0) && (
             <div className="absolute right-3 top-[15px] z-20 flex items-center gap-1.5">
               {currentOutputImageId && (
@@ -835,15 +931,7 @@ export default function DetailModal() {
         </div>
 
         {/* 右侧：信息 */}
-        <div className="md:w-1/2 w-full p-5 overflow-y-auto overscroll-contain flex flex-col">
-          <button
-            onClick={() => setDetailTaskId(null)}
-            className="absolute top-3 right-3 hidden p-1 rounded-full hover:bg-gray-100 dark:hover:bg-white/[0.06] transition text-gray-400 z-10 md:block"
-            aria-label="关闭"
-          >
-            <CloseIcon className="w-5 h-5" />
-          </button>
-
+        <div className="liquid-glass-detail-panel md:w-1/2 w-full p-5 pr-14 md:pr-14 overflow-y-auto overscroll-contain flex flex-col">
           <div data-selectable-text className="flex-1">
             <div className="flex items-center gap-1.5 mb-2">
               <h3 className="text-xs font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider">
@@ -886,8 +974,10 @@ export default function DetailModal() {
             {showRevisedPrompt && currentRevisedPrompt && (
               <div className="mb-4">
                 <ActualValueBadge
-                  value={currentRevisedPrompt}
+                  value={revisedPromptDisplayValue}
                   className="max-w-full rounded px-2 py-1 text-left text-xs leading-relaxed whitespace-pre-wrap"
+                  tooltip={revisedPromptTooltip}
+                  cursor="default"
                 />
               </div>
             )}
@@ -960,7 +1050,7 @@ export default function DetailModal() {
               参数配置
             </h3>
             {showSourceInfo && (
-              <div className="mb-2 min-w-0 overflow-hidden rounded-lg bg-gray-50 px-3 py-2 text-xs dark:bg-white/[0.03]">
+              <div className="liquid-glass-detail-card mb-2 min-w-0 overflow-hidden rounded-xl px-3 py-2 text-xs">
                 <span className="text-gray-400 dark:text-gray-500">来源</span>
                 <br />
                 <div className="mt-0.5 overflow-x-auto hide-scrollbar whitespace-nowrap mask-edge-r pr-2">
@@ -970,21 +1060,21 @@ export default function DetailModal() {
               </div>
             )}
             <div className="grid grid-cols-2 gap-2 text-xs mb-4 min-w-0">
-              <div className="bg-gray-50 dark:bg-white/[0.03] rounded-lg px-3 py-2 min-w-0 overflow-hidden">
+              <div className="liquid-glass-detail-card rounded-xl px-3 py-2 min-w-0 overflow-hidden">
                 <span className="text-gray-400 dark:text-gray-500">尺寸</span>
                 <br />
                 <div className="mt-0.5 overflow-x-auto hide-scrollbar whitespace-nowrap mask-edge-r pr-2">
                   <DetailParamValue task={task} paramKey="size" className="font-medium" actualParams={currentActualParams} />
                 </div>
               </div>
-              <div className="bg-gray-50 dark:bg-white/[0.03] rounded-lg px-3 py-2 min-w-0 overflow-hidden">
+              <div className="liquid-glass-detail-card rounded-xl px-3 py-2 min-w-0 overflow-hidden">
                 <span className="text-gray-400 dark:text-gray-500">质量</span>
                 <br />
                 <div className="mt-0.5 overflow-x-auto hide-scrollbar whitespace-nowrap mask-edge-r pr-2">
                   <DetailParamValue task={task} paramKey="quality" className="font-medium" actualParams={currentActualParams} />
                 </div>
               </div>
-              <div className="bg-gray-50 dark:bg-white/[0.03] rounded-lg px-3 py-2 min-w-0 overflow-hidden">
+              <div className="liquid-glass-detail-card rounded-xl px-3 py-2 min-w-0 overflow-hidden">
                 <span className="text-gray-400 dark:text-gray-500">格式</span>
                 <br />
                 <div className="mt-0.5 overflow-x-auto hide-scrollbar whitespace-nowrap mask-edge-r pr-2">
@@ -992,7 +1082,7 @@ export default function DetailModal() {
                 </div>
               </div>
               {isPngOutput ? (
-                <div className="bg-gray-50 dark:bg-white/[0.03] rounded-lg px-3 py-2 min-w-0 overflow-hidden">
+                <div className="liquid-glass-detail-card rounded-xl px-3 py-2 min-w-0 overflow-hidden">
                   <span className="text-gray-400 dark:text-gray-500">透明背景</span>
                   <br />
                   <div className="mt-0.5 overflow-x-auto hide-scrollbar whitespace-nowrap mask-edge-r pr-2">
@@ -1005,7 +1095,7 @@ export default function DetailModal() {
                   </div>
                 </div>
               ) : (
-                <div className="bg-gray-50 dark:bg-white/[0.03] rounded-lg px-3 py-2 min-w-0 overflow-hidden">
+                <div className="liquid-glass-detail-card rounded-xl px-3 py-2 min-w-0 overflow-hidden">
                   <span className="text-gray-400 dark:text-gray-500">压缩率</span>
                   <br />
                   <div className="mt-0.5 overflow-x-auto hide-scrollbar whitespace-nowrap mask-edge-r pr-2">
@@ -1013,7 +1103,7 @@ export default function DetailModal() {
                   </div>
                 </div>
               )}
-              <div className="bg-gray-50 dark:bg-white/[0.03] rounded-lg px-3 py-2 min-w-0 overflow-hidden">
+              <div className="liquid-glass-detail-card rounded-xl px-3 py-2 min-w-0 overflow-hidden">
                 <span className="text-gray-400 dark:text-gray-500">审核</span>
                 <br />
                 <div className="mt-0.5 overflow-x-auto hide-scrollbar whitespace-nowrap mask-edge-r pr-2">
@@ -1021,7 +1111,7 @@ export default function DetailModal() {
                 </div>
               </div>
               {!isAgentTask && (
-                <div className="bg-gray-50 dark:bg-white/[0.03] rounded-lg px-3 py-2 min-w-0 overflow-hidden">
+                <div className="liquid-glass-detail-card rounded-xl px-3 py-2 min-w-0 overflow-hidden">
                   <span className="text-gray-400 dark:text-gray-500">数量</span>
                   <br />
                   <div className="mt-0.5 overflow-x-auto hide-scrollbar whitespace-nowrap mask-edge-r pr-2">
@@ -1039,10 +1129,10 @@ export default function DetailModal() {
           </div>
 
           {/* 操作按钮 */}
-          <div className="grid grid-cols-4 sm:flex gap-2 pt-4 border-t border-gray-100 dark:border-white/[0.08]">
+          <div className="liquid-glass-detail-actions -mx-1 grid grid-cols-4 sm:flex gap-2 pt-4 px-1 border-t border-gray-100 dark:border-white/[0.08]">
             <button
               onClick={handleReuse}
-              className="col-span-2 sm:flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-500/20 transition text-sm font-medium whitespace-nowrap"
+              className="liquid-glass-detail-action col-span-2 sm:flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-blue-600 dark:text-blue-300 hover:text-blue-700 dark:hover:text-blue-200 transition text-sm font-medium whitespace-nowrap"
             >
               <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
@@ -1052,14 +1142,14 @@ export default function DetailModal() {
             <button
               onClick={handleEdit}
               disabled={!outputLen}
-              className="col-span-2 sm:flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-green-50 dark:bg-green-500/10 text-green-600 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-500/20 disabled:opacity-40 disabled:cursor-not-allowed transition text-sm font-medium whitespace-nowrap"
+              className="liquid-glass-detail-action col-span-2 sm:flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-green-600 dark:text-green-300 hover:text-green-700 dark:hover:text-green-200 disabled:opacity-40 disabled:cursor-not-allowed transition text-sm font-medium whitespace-nowrap"
             >
               <EditIcon className="w-4 h-4 flex-shrink-0" />
               编辑输出
             </button>
             <button
               onClick={handleDelete}
-              className="col-span-3 sm:flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-500/20 transition text-sm font-medium whitespace-nowrap"
+              className="liquid-glass-detail-action col-span-3 sm:flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-red-600 dark:text-red-300 hover:text-red-700 dark:hover:text-red-200 transition text-sm font-medium whitespace-nowrap"
             >
               <TrashIcon className="w-4 h-4 flex-shrink-0" />
               删除任务
@@ -1068,8 +1158,8 @@ export default function DetailModal() {
               onClick={handleToggleFavorite}
               className={`col-span-1 sm:flex-none sm:w-11 w-full flex items-center justify-center rounded-xl transition ${
                 task.isFavorite
-                  ? 'bg-yellow-50 text-yellow-500 hover:bg-yellow-100 dark:bg-yellow-500/10 dark:hover:bg-yellow-500/20'
-                  : 'bg-gray-50 text-gray-400 hover:bg-yellow-50 hover:text-yellow-500 dark:bg-white/[0.04] dark:hover:bg-yellow-500/10'
+                  ? 'liquid-glass-detail-action text-yellow-500 hover:text-yellow-600 dark:text-yellow-300 dark:hover:text-yellow-200'
+                  : 'liquid-glass-detail-action text-gray-400 hover:text-yellow-500 dark:text-gray-300 dark:hover:text-yellow-300'
               }`}
               title={task.isFavorite ? '编辑收藏夹' : '收藏任务'}
             >

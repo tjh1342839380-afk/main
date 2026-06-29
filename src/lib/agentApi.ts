@@ -93,6 +93,12 @@ const AGENT_TITLE_INSTRUCTIONS = [
 
 const AGENT_TITLE_MAX_LENGTH = 28
 
+const REVISED_PROMPT_TRANSLATION_INSTRUCTIONS = [
+  'Translate the user-provided image-generation revised prompt into Simplified Chinese.',
+  'Preserve concrete visual details, names, style terms, camera/lens terms, numbers, aspect ratios, parameters, and XML tags exactly when they should remain literal.',
+  'Output only the translated prompt text. Do not add explanations, markdown, quotes, labels, or extra notes.',
+].join('\n')
+
 function createHeaders(profile: ApiProfile): Record<string, string> {
   return {
     Authorization: `Bearer ${profile.apiKey}`,
@@ -797,6 +803,50 @@ export async function callAgentConversationTitleApi(opts: {
 
     const payload = await response.json() as ResponsesApiResponse
     return parseAgentConversationTitleXml(extractText(payload))
+  } finally {
+    clearTimeout(timeoutId)
+    signal?.removeEventListener('abort', abortFromCaller)
+  }
+}
+
+export async function callRevisedPromptTranslationApi(opts: {
+  settings: AppSettings
+  profile: ApiProfile
+  prompt: string
+  signal?: AbortSignal
+}): Promise<string> {
+  const { settings, profile, prompt, signal } = opts
+  const proxyConfig = readClientDevProxyConfig()
+  const useApiProxy = shouldUseApiProxy(profile.apiProxy, proxyConfig)
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), profile.timeout * 1000)
+  const abortFromCaller = () => controller.abort()
+  if (signal?.aborted) controller.abort()
+  signal?.addEventListener('abort', abortFromCaller, { once: true })
+
+  try {
+    const response = await fetch(buildApiUrl(profile.baseUrl, 'responses', proxyConfig, useApiProxy), {
+      method: 'POST',
+      headers: createHeaders(profile),
+      cache: 'no-store',
+      body: JSON.stringify({
+        model: profile.model || settings.model,
+        instructions: REVISED_PROMPT_TRANSLATION_INSTRUCTIONS,
+        input: [{
+          role: 'user',
+          content: [{ type: 'input_text', text: prompt }],
+        }],
+        max_output_tokens: Math.min(4096, Math.max(256, Math.ceil(prompt.length))),
+      }),
+      signal: controller.signal,
+    })
+
+    if (!response.ok) {
+      throw new Error(await getApiErrorMessage(response))
+    }
+
+    const payload = await response.json() as ResponsesApiResponse
+    return extractText(payload)
   } finally {
     clearTimeout(timeoutId)
     signal?.removeEventListener('abort', abortFromCaller)
