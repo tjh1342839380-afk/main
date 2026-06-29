@@ -1,5 +1,5 @@
-const CACHE_NAME = 'gpt-image-2-for-tjh-v0.1.5'
-const APP_SHELL = ['./', './index.html', './manifest.webmanifest', './pwa-icon.svg']
+const CACHE_NAME = 'gpt-image-2-for-tjh-v0.1.7'
+const APP_SHELL = ['./', './index.html', './manifest.webmanifest', './brand/gpt-img-2-for-tjh-icon.png']
 
 self.addEventListener('install', (event) => {
   event.waitUntil(

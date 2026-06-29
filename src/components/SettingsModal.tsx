@@ -1848,10 +1848,14 @@ export default function SettingsModal() {
               <div className="flex h-full min-h-[300px] flex-col items-center justify-center px-6 pb-8">
                 <div className="flex w-full max-w-[380px] flex-col items-center rounded-[28px] border border-white/60 bg-white/45 px-8 py-10 text-center shadow-[0_20px_60px_rgba(15,23,42,0.08)] ring-1 ring-black/[0.03] backdrop-blur-2xl dark:border-white/[0.08] dark:bg-white/[0.04] dark:shadow-[0_20px_70px_rgba(0,0,0,0.28)] dark:ring-white/[0.05]">
                   <div className="mb-6 flex h-[92px] w-[92px] items-center justify-center rounded-full border border-white/70 bg-white/55 shadow-[inset_0_1px_0_rgba(255,255,255,0.65),0_14px_42px_rgba(15,23,42,0.08)] backdrop-blur-xl dark:border-white/[0.08] dark:bg-white/[0.05] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_18px_50px_rgba(0,0,0,0.3)]">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-[18px] bg-neutral-950 text-white shadow-[0_10px_26px_rgba(15,23,42,0.28)] dark:bg-white dark:text-neutral-950">
-                      <svg className="h-7 w-7" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                        <path d="M13.1 2.6 5.4 13.2c-.39.54-.01 1.3.66 1.3h4.54l-.9 6.25c-.12.86.96 1.32 1.49.63l7.5-9.65c.43-.55.04-1.33-.65-1.33h-4.29l1.02-7.05c.13-.87-.95-1.36-1.47-.75Z" />
-                      </svg>
+                    <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-[20px] bg-white shadow-[0_10px_26px_rgba(15,23,42,0.18)]">
+                      <img
+                        src="/brand/gpt-img-2-for-tjh-icon.png"
+                        alt=""
+                        className="h-full w-full object-cover"
+                        draggable={false}
+                        aria-hidden="true"
+                      />
                     </div>
                   </div>
 

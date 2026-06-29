@@ -156,7 +156,9 @@ export default function Header({ dynamicBackgroundEnabled, onToggleDynamicBackgr
   const backgroundToggleLabel = dynamicBackgroundEnabled
     ? '\u5207\u6362\u4e3a\u9759\u6001\u80cc\u666f'
     : '\u5207\u6362\u4e3a\u52a8\u6001\u80cc\u666f'
+  const showStaticBackgroundSwitcher = !dynamicBackgroundEnabled
   const canSwitchStaticBackground = !dynamicBackgroundEnabled && staticBackgroundCount > 1
+  const nextBackgroundLabel = canSwitchStaticBackground ? '\u4e0b\u4e00\u5f20\u58c1\u7eb8' : '\u6ca1\u6709\u66f4\u591a\u58c1\u7eb8'
 
   return (
     <>
@@ -279,23 +281,25 @@ export default function Header({ dynamicBackgroundEnabled, onToggleDynamicBackgr
                 {backgroundToggleLabel}
               </ViewportTooltip>
             </div>
-            {canSwitchStaticBackground && (
+            {showStaticBackgroundSwitcher && (
               <div
                 className="relative"
                 {...nextBackgroundTooltip.handlers}
               >
                 <button
                   onClick={() => {
+                    if (!canSwitchStaticBackground) return
                     dismissAllTooltips()
                     onNextStaticBackground()
                   }}
-                  className="p-2 rounded-lg text-sky-700 hover:bg-sky-100 dark:text-sky-300 dark:hover:bg-sky-500/20 transition-colors"
-                  aria-label="下一张壁纸"
+                  disabled={!canSwitchStaticBackground}
+                  className={`p-2 rounded-lg transition-colors ${canSwitchStaticBackground ? 'text-sky-700 hover:bg-sky-100 dark:text-sky-300 dark:hover:bg-sky-500/20' : 'cursor-not-allowed text-gray-400/60 dark:text-gray-500/70'}`}
+                  aria-label={nextBackgroundLabel}
                 >
                   <RefreshIcon className="w-5 h-5" />
                 </button>
                 <ViewportTooltip visible={nextBackgroundTooltip.visible} className="whitespace-nowrap">
-                  下一张壁纸
+                  {nextBackgroundLabel}
                 </ViewportTooltip>
               </div>
             )}

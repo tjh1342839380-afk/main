@@ -31,7 +31,7 @@ html {
 }
 
 body {
-  background: #111827 url('/wallpapers/static/page-background-kushiro-sunset.png') center / cover fixed no-repeat;
+  background: #111827 url('/wallpapers/static/page-background-az.png') center / cover fixed no-repeat;
   padding: 0;
   -webkit-user-select: none;
   user-select: none;
@@ -233,6 +233,37 @@ body {
   backdrop-filter: blur(24px) saturate(180%);
 }
 
+.task-grid-pager-shell {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--input-bar-clearance, 12rem) + 0.75rem);
+  z-index: 31;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.liquid-glass-pager {
+  pointer-events: auto;
+  border-color: rgba(255, 255, 255, 0.52) !important;
+  background:
+    radial-gradient(80px 34px at 20% 0%, rgba(255, 255, 255, 0.62), rgba(255, 255, 255, 0.16) 68%, transparent 100%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.62), rgba(255, 255, 255, 0.3) 58%, rgba(240, 253, 244, 0.28)) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  backdrop-filter: blur(24px) saturate(180%);
+}
+
+.task-card-info-drawer {
+  border-left: 1px solid rgba(255, 255, 255, 0.58);
+  background:
+    radial-gradient(90px 56px at 12% 0%, rgba(255, 255, 255, 0.56), rgba(255, 255, 255, 0.12) 68%, transparent 100%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.76), rgba(255, 255, 255, 0.54) 58%, rgba(240, 253, 244, 0.42));
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  backdrop-filter: blur(24px) saturate(180%);
+  box-shadow:
+    inset 1px 0 0 rgba(255, 255, 255, 0.5),
+    -12px 0 28px rgba(15, 23, 42, 0.12);
+}
+
 .compact-input-card {
   transform: translateZ(0);
   backface-visibility: hidden;
@@ -372,6 +403,16 @@ body {
       radial-gradient(90px 42px at 18% 0%, rgba(255, 255, 255, 0.13), rgba(255, 255, 255, 0.03) 62%, transparent 100%),
       linear-gradient(135deg, rgba(15, 23, 42, 0.54), rgba(3, 7, 18, 0.34) 58%, rgba(15, 23, 42, 0.28)) !important;
   }
+
+  .task-card-info-drawer {
+    border-left-color: rgba(255, 255, 255, 0.14);
+    background:
+      radial-gradient(90px 56px at 12% 0%, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.03) 68%, transparent 100%),
+      linear-gradient(135deg, rgba(15, 23, 42, 0.74), rgba(3, 7, 18, 0.56) 58%, rgba(15, 23, 42, 0.46));
+    box-shadow:
+      inset 1px 0 0 rgba(255, 255, 255, 0.12),
+      -12px 0 28px rgba(0, 0, 0, 0.24);
+  }
 }
 
 input,
@@ -488,7 +529,8 @@ input[type="number"] {
 @media (prefers-reduced-motion: reduce) {
   .compact-input-card,
   .input-expanded-section,
-  .input-expanded-section > * {
+  .input-expanded-section > *,
+  .task-card-info-drawer {
     transition-duration: 1ms !important;
   }
 
@@ -496,7 +538,9 @@ input[type="number"] {
   .input-expanded-section,
   .input-expanded-section > *,
   .input-bar-shell.is-expanded .input-expanded-section,
-  .input-bar-shell.is-expanded .input-expanded-section > * {
+  .input-bar-shell.is-expanded .input-expanded-section > *,
+  .group:hover .task-card-info-drawer,
+  .group:focus-within .task-card-info-drawer {
     transform: none !important;
   }
 

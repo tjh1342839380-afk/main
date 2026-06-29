@@ -347,10 +347,10 @@ export default function TaskCard({
 
       <div
         ref={cardRef}
-        className={`relative bg-white dark:bg-gray-900 rounded-xl border overflow-hidden cursor-pointer touch-pan-y will-change-transform duration-200 hover:shadow-lg dark:hover:bg-gray-800/80 ${
+        className={`group relative h-[var(--task-card-height,156px)] bg-white dark:bg-gray-900 rounded-xl border overflow-hidden cursor-pointer touch-pan-y will-change-transform duration-200 hover:shadow-lg dark:hover:bg-gray-800/80 ${
           isSwiping ? '!bg-white dark:!bg-gray-900' : ''
         } ${
-          !isSwiping ? 'transition-[box-shadow,border-color,background-color,transform]' : 'transition-[box-shadow,border-color,background-color]'
+          !isSwiping ? 'transition-[height,box-shadow,border-color,background-color,transform]' : 'transition-[height,box-shadow,border-color,background-color]'
         } ${
           task.status === 'running'
             ? 'border-blue-400 generating'
@@ -398,14 +398,14 @@ export default function TaskCard({
           </svg>
         </div>
       )}
-      <div className="flex h-40">
+      <div className="relative h-full">
         {/* 左侧图片区域 */}
-        <div className="w-40 min-w-[10rem] h-full bg-gray-100 dark:bg-black/20 relative flex items-center justify-center overflow-hidden flex-shrink-0">
+        <div className="absolute inset-0 bg-gray-100 dark:bg-black/20 flex items-center justify-center overflow-hidden">
           {task.status === 'running' && streamPreviewSrc && (
             <>
               <img
                 src={streamPreviewSrc}
-                className={`h-full w-full object-cover ${streamPreviewLoaded ? '' : 'hidden'}`}
+                className={`h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-[1.035] group-focus-within:scale-[1.035] ${streamPreviewLoaded ? '' : 'hidden'}`}
                 alt=""
                 onLoad={() => setStreamPreviewLoaded(true)}
                 onError={() => setStreamPreviewLoaded(false)}
@@ -487,7 +487,7 @@ export default function TaskCard({
                 src={thumbSrc}
                 data-image-id={task.outputImages[0]}
                 data-output-image-ids={task.outputImages.join(',')}
-                className="saveable-image w-full h-full object-cover"
+                className="saveable-image w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-[1.035] group-focus-within:scale-[1.035]"
                 loading="lazy"
                 alt=""
               />
@@ -536,7 +536,7 @@ export default function TaskCard({
         </div>
 
         {/* 右侧信息区域 */}
-        <div className="flex-1 p-3 flex flex-col min-w-0">
+        <div className="task-card-info-drawer absolute inset-y-0 right-0 z-20 flex w-[68%] min-w-[13rem] max-w-[18rem] translate-x-[calc(100%-0.75rem)] flex-col p-3 opacity-0 transition-[transform,opacity] duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] pointer-events-none group-hover:translate-x-0 group-hover:opacity-100 group-hover:pointer-events-auto group-focus-within:translate-x-0 group-focus-within:opacity-100 group-focus-within:pointer-events-auto">
           <div className="flex-1 min-h-0 mb-2 overflow-hidden">
             {showPendingPrompt ? (
               <div className="leading-relaxed">
@@ -641,7 +641,7 @@ export default function TaskCard({
                 <TaskActionButton
                   tooltip="重试任务"
                   onClick={() => retryTask(task)}
-                  className="p-1.5 rounded-md hover:bg-blue-50 dark:hover:bg-blue-950/30 text-gray-400 hover:text-blue-500 transition"
+                  className="p-1.5 rounded-md hover:bg-blue-50 dark:hover:bg-blue-950/30 text-white/75 hover:text-blue-500 transition"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -654,7 +654,7 @@ export default function TaskCard({
                 className={`p-1.5 rounded-md transition ${
                   task.isFavorite
                     ? 'text-yellow-400 hover:bg-yellow-50 dark:hover:bg-yellow-500/10'
-                    : 'text-gray-400 hover:text-yellow-400 hover:bg-yellow-50 dark:hover:bg-yellow-500/10'
+                    : 'text-white/75 hover:text-yellow-400 hover:bg-yellow-50 dark:hover:bg-yellow-500/10'
                 }`}
               >
                 <svg
@@ -674,7 +674,7 @@ export default function TaskCard({
               <TaskActionButton
                 tooltip="复用配置"
                 onClick={onReuse}
-                className="p-1.5 rounded-md hover:bg-blue-50 dark:hover:bg-blue-950/30 text-gray-400 hover:text-blue-500 transition"
+                className="p-1.5 rounded-md hover:bg-blue-50 dark:hover:bg-blue-950/30 text-white/75 hover:text-blue-500 transition"
               >
                 <svg
                   className="w-4 h-4"
@@ -693,7 +693,7 @@ export default function TaskCard({
               <TaskActionButton
                 tooltip="编辑输出"
                 onClick={onEditOutputs}
-                className="p-1.5 rounded-md hover:bg-green-50 dark:hover:bg-green-950/30 text-gray-400 hover:text-green-500 transition disabled:opacity-30"
+                className="p-1.5 rounded-md hover:bg-green-50 dark:hover:bg-green-950/30 text-white/75 hover:text-green-500 transition disabled:opacity-30"
                 disabled={!task.outputImages?.length}
               >
                 <svg
@@ -713,7 +713,7 @@ export default function TaskCard({
               <TaskActionButton
                 tooltip="删除任务"
                 onClick={onDelete}
-                className="p-1.5 rounded-md hover:bg-red-50 dark:hover:bg-red-950/30 text-gray-400 hover:text-red-500 transition"
+                className="p-1.5 rounded-md hover:bg-red-50 dark:hover:bg-red-950/30 text-white/75 hover:text-red-500 transition"
               >
                 <svg
                   className="w-4 h-4"

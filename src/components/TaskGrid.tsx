@@ -1,16 +1,10 @@
-import { useMemo, useRef, useState, useEffect } from 'react'
+import { useMemo, useRef, useState, useEffect, type CSSProperties } from 'react'
 import { useStore, reuseConfig, editOutputs, removeTask, taskMatchesFavoriteScope, taskMatchesFilterStatus, taskMatchesSearchQuery } from '../store'
 import TaskCard from './TaskCard'
-import { ArrowDownIcon } from './icons'
+import { ChevronLeftIcon, ChevronRightIcon } from './icons'
 
-const MAX_TASK_ROWS = 4
-
-function getTaskGridColumnCount() {
-  if (typeof window === 'undefined') return 3
-  if (window.matchMedia('(min-width: 1024px)').matches) return 3
-  if (window.matchMedia('(min-width: 640px)').matches) return 2
-  return 1
-}
+const TASKS_PER_PAGE = 12
+const PAGINATION_TASK_THRESHOLD = TASKS_PER_PAGE
 
 export default function TaskGrid() {
   const tasks = useStore((s) => s.tasks)
@@ -25,7 +19,6 @@ export default function TaskGrid() {
   const clearSelection = useStore((s) => s.clearSelection)
   const rootRef = useRef<HTMLDivElement>(null)
   const gridRef = useRef<HTMLDivElement>(null)
-  const loadMoreRef = useRef<HTMLDivElement>(null)
   const [selectionBox, setSelectionBox] = useState<{ startPageX: number; startPageY: number; currentPageX: number; currentPageY: number } | null>(null)
   const dragStart = useRef<{ pageX: number; pageY: number } | null>(null)
   const lastClientPoint = useRef<{ x: number; y: number } | null>(null)
@@ -39,8 +32,7 @@ export default function TaskGrid() {
   const startedWithCtrl = useRef(false)
   const initialSelection = useRef<string[]>([])
   const isMac = /Mac|iPod|iPhone|iPad/.test(navigator.platform)
-  const [columnCount, setColumnCount] = useState(getTaskGridColumnCount)
-  const [visibleCount, setVisibleCount] = useState(() => getTaskGridColumnCount() * MAX_TASK_ROWS)
+  const [pageIndex, setPageIndex] = useState(0)
 
   const filteredTasks = useMemo(() => {
     const sorted = [...tasks].sort((a, b) => b.createdAt - a.createdAt)
@@ -53,44 +45,45 @@ export default function TaskGrid() {
     })
   }, [tasks, searchQuery, filterStatus, filterFavorite, activeFavoriteCollectionId])
 
-  const batchSize = columnCount * MAX_TASK_ROWS
+  const pageSize = TASKS_PER_PAGE
+  const pageCount = Math.max(1, Math.ceil(filteredTasks.length / pageSize))
+  const currentPageIndex = Math.min(pageIndex, pageCount - 1)
+  const pageStart = currentPageIndex * pageSize
   const visibleTasks = useMemo(() => {
-    return filteredTasks.slice(0, visibleCount)
-  }, [filteredTasks, visibleCount])
-  const hasMoreTasks = visibleTasks.length < filteredTasks.length
-  const showLoadMore = filteredTasks.length > batchSize
-  const visibleProgress = filteredTasks.length === 0 ? 0 : (visibleTasks.length / filteredTasks.length) * 100
-  const remainingCount = Math.max(0, filteredTasks.length - visibleTasks.length)
-  const nextLoadCount = Math.min(batchSize, remainingCount)
+    return filteredTasks.slice(pageStart, pageStart + pageSize)
+  }, [filteredTasks, pageSize, pageStart])
+  const showPagination = filteredTasks.length > PAGINATION_TASK_THRESHOLD
+  const canGoPrev = currentPageIndex > 0
+  const canGoNext = currentPageIndex < pageCount - 1
 
   useEffect(() => {
-    const updateColumnCount = () => setColumnCount(getTaskGridColumnCount())
-
-    updateColumnCount()
-    window.addEventListener('resize', updateColumnCount)
-    return () => window.removeEventListener('resize', updateColumnCount)
-  }, [])
+    setPageIndex(0)
+  }, [searchQuery, filterStatus, filterFavorite, activeFavoriteCollectionId])
 
   useEffect(() => {
-    setVisibleCount(batchSize)
-  }, [searchQuery, filterStatus, filterFavorite, activeFavoriteCollectionId, batchSize])
+    setPageIndex((current) => Math.min(current, pageCount - 1))
+  }, [pageCount])
 
   useEffect(() => {
-    if (!hasMoreTasks || !loadMoreRef.current) return
+    document.documentElement.style.setProperty('--task-grid-bottom-clearance', showPagination ? '5rem' : '2rem')
+    return () => {
+      document.documentElement.style.removeProperty('--task-grid-bottom-clearance')
+    }
+  }, [showPagination])
 
-    const observer = new IntersectionObserver((entries) => {
-      if (!entries.some((entry) => entry.isIntersecting)) return
-      setVisibleCount((current) => Math.min(current + batchSize, filteredTasks.length))
-    }, {
-      rootMargin: '360px 0px 520px',
+  const goToPage = (nextPageIndex: number) => {
+    const next = Math.min(Math.max(nextPageIndex, 0), pageCount - 1)
+    if (next === currentPageIndex) return
+
+    setPageIndex(next)
+
+    const root = rootRef.current
+    if (!root) return
+
+    window.requestAnimationFrame(() => {
+      const top = Math.max(0, root.getBoundingClientRect().top + window.scrollY - 96)
+      window.scrollTo({ top, behavior: 'smooth' })
     })
-
-    observer.observe(loadMoreRef.current)
-    return () => observer.disconnect()
-  }, [batchSize, filteredTasks.length, hasMoreTasks])
-
-  const loadMoreTasks = () => {
-    setVisibleCount((current) => Math.min(current + batchSize, filteredTasks.length))
   }
 
   const handleDelete = (task: typeof tasks[0]) => {
@@ -334,6 +327,7 @@ export default function TaskGrid() {
       ref={rootRef}
       data-task-grid-root
       className="relative min-h-[50vh]"
+      style={{ '--task-card-height': showPagination ? '156px' : '172px' } as CSSProperties}
     >
       <div ref={gridRef} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 pb-6">
         {visibleTasks.map((task) => (
@@ -362,40 +356,32 @@ export default function TaskGrid() {
           </div>
         ))}
       </div>
-      {showLoadMore && (
-        <div ref={loadMoreRef} data-no-drag-select className="mt-1 mb-10 flex justify-center px-3 sm:mt-2 sm:mb-12">
-          <div className="liquid-glass-load-more w-full max-w-[30rem] rounded-2xl border px-3 py-3 text-gray-700 shadow-[0_14px_36px_rgba(15,23,42,0.14)] ring-1 ring-black/5 backdrop-blur-2xl dark:text-gray-200 dark:ring-white/10">
-            <div className="flex items-center justify-between gap-4">
-              <div className="min-w-0">
-                <div className="text-sm font-semibold text-gray-800 dark:text-gray-100">
-                  {hasMoreTasks ? '继续浏览' : '已显示全部'}
-                </div>
-                <div className="mt-0.5 text-xs tabular-nums text-gray-500 dark:text-gray-400">
-                  {`已显示 ${visibleTasks.length} / ${filteredTasks.length} 个任务`}
-                </div>
-              </div>
-              {hasMoreTasks ? (
-                <button
-                  type="button"
-                  onClick={loadMoreTasks}
-                  className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-xl bg-blue-500 px-3 text-sm font-medium text-white shadow-sm transition-all duration-200 hover:bg-blue-600 active:scale-95"
-                  aria-label="加载更多任务"
-                >
-                  <ArrowDownIcon className="h-4 w-4" />
-                  <span>{`更多 ${nextLoadCount}`}</span>
-                </button>
-              ) : (
-                <div className="h-10 shrink-0 rounded-xl bg-black/[0.04] px-3 text-sm font-medium leading-10 text-gray-500 dark:bg-white/[0.06] dark:text-gray-400">
-                  浏览完成
-                </div>
-              )}
+      {showPagination && (
+        <div data-no-drag-select className="task-grid-pager-shell">
+          <div className="liquid-glass-pager flex items-center gap-1 rounded-full border px-1.5 py-1.5 text-gray-700 shadow-[0_14px_34px_rgba(15,23,42,0.18)] ring-1 ring-black/5 dark:text-gray-200 dark:ring-white/10">
+            <button
+              type="button"
+              onClick={() => goToPage(currentPageIndex - 1)}
+              disabled={!canGoPrev}
+              className="flex h-8 w-8 items-center justify-center rounded-full text-gray-600 transition-all hover:bg-white/60 hover:text-gray-900 active:scale-95 disabled:pointer-events-none disabled:opacity-35 dark:text-gray-300 dark:hover:bg-white/[0.08] dark:hover:text-white"
+              aria-label="上一页"
+            >
+              <ChevronLeftIcon className="h-4 w-4" />
+            </button>
+            <div className="flex min-w-[4.75rem] items-center justify-center gap-1 px-2 text-xs font-semibold tabular-nums text-gray-700 dark:text-gray-200">
+              <span>{currentPageIndex + 1}</span>
+              <span className="text-gray-400 dark:text-gray-500">/</span>
+              <span>{pageCount}</span>
             </div>
-            <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-gray-200/80 dark:bg-white/[0.08]">
-              <div
-                className="h-full rounded-full bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.45)] transition-[width] duration-300"
-                style={{ width: `${visibleProgress}%` }}
-              />
-            </div>
+            <button
+              type="button"
+              onClick={() => goToPage(currentPageIndex + 1)}
+              disabled={!canGoNext}
+              className="flex h-8 w-8 items-center justify-center rounded-full text-gray-600 transition-all hover:bg-white/60 hover:text-gray-900 active:scale-95 disabled:pointer-events-none disabled:opacity-35 dark:text-gray-300 dark:hover:bg-white/[0.08] dark:hover:text-white"
+              aria-label="下一页"
+            >
+              <ChevronRightIcon className="h-4 w-4" />
+            </button>
           </div>
         </div>
       )}

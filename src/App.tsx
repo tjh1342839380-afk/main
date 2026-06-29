@@ -26,8 +26,7 @@ let customProviderConfigUrlImportStarted = false
 const DYNAMIC_BACKGROUND_STORAGE_KEY = 'gpt-image-playground:dynamic-background-enabled'
 const STATIC_BACKGROUND_MANIFEST_URL = '/wallpapers/background-wallpapers.json'
 const DEFAULT_DYNAMIC_BACKGROUND_URL = '/wallpapers/dynamic/page-background.mp4'
-const DEFAULT_STATIC_BACKGROUND_URL = '/wallpapers/static/page-background-kushiro-sunset.png'
-const DAY_MS = 24 * 60 * 60 * 1000
+const DEFAULT_STATIC_BACKGROUND_URL = '/wallpapers/static/page-background-az.png'
 
 function getInitialDynamicBackgroundEnabled() {
   try {
@@ -35,11 +34,6 @@ function getInitialDynamicBackgroundEnabled() {
   } catch {
     return true
   }
-}
-
-function getLocalDayNumber() {
-  const now = new Date()
-  return Math.floor(new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() / DAY_MS)
 }
 
 function normalizeStaticBackgroundImages(value: unknown) {
@@ -70,11 +64,10 @@ export default function App() {
   const activeFavoriteCollectionId = useStore((s) => s.activeFavoriteCollectionId)
   const [dynamicBackgroundEnabled, setDynamicBackgroundEnabled] = useState(getInitialDynamicBackgroundEnabled)
   const [hasEnteredExperience, setHasEnteredExperience] = useState(false)
-  const [wallpaperDayNumber, setWallpaperDayNumber] = useState(getLocalDayNumber)
   const [staticBackgroundManualOffset, setStaticBackgroundManualOffset] = useState(0)
   const [staticBackgroundImages, setStaticBackgroundImages] = useState<string[]>([DEFAULT_STATIC_BACKGROUND_URL])
   const dynamicBackgroundVideoRef = useRef<HTMLVideoElement>(null)
-  const staticBackgroundUrl = staticBackgroundImages[(wallpaperDayNumber + staticBackgroundManualOffset) % staticBackgroundImages.length] ?? DEFAULT_STATIC_BACKGROUND_URL
+  const staticBackgroundUrl = staticBackgroundImages[staticBackgroundManualOffset % staticBackgroundImages.length] ?? DEFAULT_STATIC_BACKGROUND_URL
   const showDynamicBackground = !hasEnteredExperience || dynamicBackgroundEnabled
   useDockerApiUrlMigrationNotice()
   useGlobalClickSuppression()
@@ -180,17 +173,6 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-    const timer = window.setInterval(() => {
-      setWallpaperDayNumber((current) => {
-        const next = getLocalDayNumber()
-        return next === current ? current : next
-      })
-    }, 60_000)
-
-    return () => window.clearInterval(timer)
-  }, [])
-
-  useEffect(() => {
     try {
       window.localStorage.setItem(DYNAMIC_BACKGROUND_STORAGE_KEY, dynamicBackgroundEnabled ? 'true' : 'false')
     } catch {
@@ -259,7 +241,11 @@ export default function App() {
             {appMode === 'agent' ? (
               <AgentWorkspace />
             ) : (
-              <main data-home-main data-drag-select-surface className="pb-48">
+              <main
+                data-home-main
+                data-drag-select-surface
+                className="pb-[calc(var(--input-bar-clearance,12rem)+var(--task-grid-bottom-clearance,2rem))]"
+              >
                 <div className="safe-area-x max-w-7xl mx-auto">
                   <SearchBar />
                   {filterFavorite && !activeFavoriteCollectionId ? <FavoriteCollectionsView /> : <TaskGrid />}

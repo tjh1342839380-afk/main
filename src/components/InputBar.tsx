@@ -646,6 +646,7 @@ export default function InputBar() {
   const [inputBarOverflowReady, setInputBarOverflowReady] = useState(false)
   const inputBarTransitioningRef = useRef(false)
   const inputBarClearanceFrameRef = useRef<number | null>(null)
+  const inputBarClearanceLoopFrameRef = useRef<number | null>(null)
   const lastInputBarClearanceRef = useRef(0)
   const handleRef = useRef<HTMLDivElement>(null)
   const dragTouchRef = useRef({ startY: 0, moved: false })
@@ -687,6 +688,12 @@ export default function InputBar() {
     if (inputBarClearanceFrameRef.current === null) return
     window.cancelAnimationFrame(inputBarClearanceFrameRef.current)
     inputBarClearanceFrameRef.current = null
+  }, [])
+
+  const stopInputBarClearanceLoop = useCallback(() => {
+    if (inputBarClearanceLoopFrameRef.current === null) return
+    window.cancelAnimationFrame(inputBarClearanceLoopFrameRef.current)
+    inputBarClearanceLoopFrameRef.current = null
   }, [])
 
   const setInputBarClearanceNow = useCallback(() => {
@@ -735,14 +742,28 @@ export default function InputBar() {
   useEffect(() => {
     inputBarTransitioningRef.current = true
     cancelInputBarClearanceFrame()
+    stopInputBarClearanceLoop()
     setInputBarOverflowReady(false)
+    const tick = () => {
+      setInputBarClearanceNow()
+      if (!inputBarTransitioningRef.current) {
+        inputBarClearanceLoopFrameRef.current = null
+        return
+      }
+      inputBarClearanceLoopFrameRef.current = window.requestAnimationFrame(tick)
+    }
+    inputBarClearanceLoopFrameRef.current = window.requestAnimationFrame(tick)
     const timer = window.setTimeout(() => {
       inputBarTransitioningRef.current = false
+      stopInputBarClearanceLoop()
       setInputBarClearanceNow()
       if (inputBarExpanded) setInputBarOverflowReady(true)
     }, 460)
-    return () => window.clearTimeout(timer)
-  }, [cancelInputBarClearanceFrame, inputBarExpanded, setInputBarClearanceNow])
+    return () => {
+      window.clearTimeout(timer)
+      stopInputBarClearanceLoop()
+    }
+  }, [cancelInputBarClearanceFrame, inputBarExpanded, setInputBarClearanceNow, stopInputBarClearanceLoop])
 
   useEffect(() => {
     const handlePointerDown = (event: PointerEvent) => {
