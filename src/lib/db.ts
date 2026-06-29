@@ -1,6 +1,8 @@
 import type { AgentConversation, TaskRecord, StoredImage, StoredImageThumbnail } from '../types'
 
-const DB_NAME = 'gpt-image-playground'
+const DB_NAME = 'gpt-image-2-for-tjh'
+const LEGACY_DB_NAME = 'gpt-image-' + 'playground'
+const LEGACY_DB_MIGRATION_STORAGE_KEY = 'gpt-image-2-for-tjh:indexeddb-migrated'
 const DB_VERSION = 3
 const STORE_TASKS = 'tasks'
 const STORE_IMAGES = 'images'
@@ -12,27 +14,101 @@ const THUMBNAIL_VERSION = 2
 
 export const CURRENT_THUMBNAIL_VERSION = THUMBNAIL_VERSION
 
-function openDB(): Promise<IDBDatabase> {
+function createSchema(db: IDBDatabase) {
+  if (!db.objectStoreNames.contains(STORE_TASKS)) {
+    db.createObjectStore(STORE_TASKS, { keyPath: 'id' })
+  }
+  if (!db.objectStoreNames.contains(STORE_IMAGES)) {
+    db.createObjectStore(STORE_IMAGES, { keyPath: 'id' })
+  }
+  if (!db.objectStoreNames.contains(STORE_THUMBNAILS)) {
+    db.createObjectStore(STORE_THUMBNAILS, { keyPath: 'id' })
+  }
+  if (!db.objectStoreNames.contains(STORE_AGENT_CONVERSATIONS)) {
+    db.createObjectStore(STORE_AGENT_CONVERSATIONS, { keyPath: 'id' })
+  }
+}
+
+function openNamedDB(name: string): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, DB_VERSION)
+    const req = indexedDB.open(name, DB_VERSION)
     req.onupgradeneeded = (e) => {
       const db = (e.target as IDBOpenDBRequest).result
-      if (!db.objectStoreNames.contains(STORE_TASKS)) {
-        db.createObjectStore(STORE_TASKS, { keyPath: 'id' })
-      }
-      if (!db.objectStoreNames.contains(STORE_IMAGES)) {
-        db.createObjectStore(STORE_IMAGES, { keyPath: 'id' })
-      }
-      if (!db.objectStoreNames.contains(STORE_THUMBNAILS)) {
-        db.createObjectStore(STORE_THUMBNAILS, { keyPath: 'id' })
-      }
-      if (!db.objectStoreNames.contains(STORE_AGENT_CONVERSATIONS)) {
-        db.createObjectStore(STORE_AGENT_CONVERSATIONS, { keyPath: 'id' })
-      }
+      createSchema(db)
     }
     req.onsuccess = () => resolve(req.result)
     req.onerror = () => reject(req.error)
   })
+}
+
+function getAllFromDB(db: IDBDatabase, storeName: string): Promise<unknown[]> {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(storeName, 'readonly')
+    const req = tx.objectStore(storeName).getAll()
+    req.onsuccess = () => resolve(req.result)
+    req.onerror = () => reject(req.error)
+  })
+}
+
+function putAllToDB(db: IDBDatabase, storeName: string, items: unknown[]): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(storeName, 'readwrite')
+    const store = tx.objectStore(storeName)
+    for (const item of items) store.put(item)
+    tx.oncomplete = () => resolve()
+    tx.onerror = () => reject(tx.error)
+    tx.onabort = () => reject(tx.error)
+  })
+}
+
+let legacyMigrationPromise: Promise<void> | null = null
+
+function hasMigratedLegacyDB() {
+  try {
+    return window.localStorage.getItem(LEGACY_DB_MIGRATION_STORAGE_KEY) === 'true'
+  } catch {
+    return false
+  }
+}
+
+function markLegacyDBMigrated() {
+  try {
+    window.localStorage.setItem(LEGACY_DB_MIGRATION_STORAGE_KEY, 'true')
+  } catch {
+    // localStorage 不可用时只依赖当前会话的 migration promise。
+  }
+}
+
+async function migrateLegacyDBIfNeeded(db: IDBDatabase) {
+  if (hasMigratedLegacyDB()) return
+
+  const existingTasks = await getAllFromDB(db, STORE_TASKS)
+  const existingImages = await getAllFromDB(db, STORE_IMAGES)
+  if (existingTasks.length > 0 || existingImages.length > 0) {
+    markLegacyDBMigrated()
+    return
+  }
+
+  let legacyDB: IDBDatabase | null = null
+  try {
+    legacyDB = await openNamedDB(LEGACY_DB_NAME)
+    for (const storeName of [STORE_TASKS, STORE_IMAGES, STORE_THUMBNAILS, STORE_AGENT_CONVERSATIONS]) {
+      const items = await getAllFromDB(legacyDB, storeName)
+      if (items.length > 0) await putAllToDB(db, storeName, items)
+    }
+  } catch (err) {
+    console.warn('Failed to migrate legacy IndexedDB:', err)
+  } finally {
+    legacyDB?.close()
+    markLegacyDBMigrated()
+  }
+}
+
+async function openDB(): Promise<IDBDatabase> {
+  const db = await openNamedDB(DB_NAME)
+  legacyMigrationPromise ??= migrateLegacyDBIfNeeded(db)
+  await legacyMigrationPromise
+  return db
 }
 
 function dbTransaction<T>(

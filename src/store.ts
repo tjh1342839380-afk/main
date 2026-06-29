@@ -59,6 +59,23 @@ import { buildExportZip, readExportZip, readExportZipFileAsDataUrl } from './lib
 export const ALL_FAVORITES_COLLECTION_ID = '__all_favorites__'
 export const DEFAULT_FAVORITE_COLLECTION_ID = '__default_favorites__'
 export const DEFAULT_FAVORITE_COLLECTION_NAME = '默认'
+const PERSIST_STORAGE_KEY = 'gpt-image-2-for-tjh'
+const LEGACY_PERSIST_STORAGE_KEY = 'gpt-image-' + 'playground'
+
+function migrateLegacyPersistStorage() {
+  if (typeof window === 'undefined') return
+
+  try {
+    if (window.localStorage.getItem(PERSIST_STORAGE_KEY)) return
+    const legacy = window.localStorage.getItem(LEGACY_PERSIST_STORAGE_KEY)
+    if (!legacy) return
+    window.localStorage.setItem(PERSIST_STORAGE_KEY, legacy)
+  } catch {
+    // localStorage 不可用时跳过兼容迁移。
+  }
+}
+
+migrateLegacyPersistStorage()
 
 // ===== Image cache =====
 // 内存缓存，id → dataUrl。只保留少量最近使用图片，避免大量 4K data URL 常驻内存。
@@ -1618,7 +1635,7 @@ export const useStore = create<AppState>()(
       },
     }),
     {
-      name: 'gpt-image-playground',
+      name: PERSIST_STORAGE_KEY,
       version: 2,
       migrate: (persistedState) => migratePersistedState(persistedState),
       partialize: getPersistedState,
@@ -5083,7 +5100,7 @@ export async function exportData(options: ExportOptions = { exportConfig: true, 
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `gpt-image-playground-backup_${formatExportFileTime(new Date(exportedAt))}.zip`
+    a.download = `gpt-image-2-for-tjh-backup_${formatExportFileTime(new Date(exportedAt))}.zip`
     a.click()
     URL.revokeObjectURL(url)
     useStore.getState().showToast('数据已导出', 'success')

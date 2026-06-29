@@ -43,7 +43,8 @@ function newId(prefix: string) {
 }
 
 const ADD_CUSTOM_PROVIDER_VALUE = '__add_custom_provider__'
-const COPY_IMPORT_URL_OPTIONS_STORAGE_KEY = 'gpt-image-playground.copy-import-url-options'
+const COPY_IMPORT_URL_OPTIONS_STORAGE_KEY = 'gpt-image-2-for-tjh.copy-import-url-options'
+const LEGACY_COPY_IMPORT_URL_OPTIONS_STORAGE_KEY = 'gpt-image-' + 'playground.copy-import-url-options'
 
 const DEFAULT_COPY_IMPORT_URL_OPTIONS = {
   includeApiKey: false,
@@ -67,8 +68,13 @@ function readCopyImportUrlOptions(): CopyImportUrlOptions {
   if (typeof window === 'undefined') return DEFAULT_COPY_IMPORT_URL_OPTIONS
 
   try {
-    const saved = window.localStorage.getItem(COPY_IMPORT_URL_OPTIONS_STORAGE_KEY)
+    const saved =
+      window.localStorage.getItem(COPY_IMPORT_URL_OPTIONS_STORAGE_KEY)
+      ?? window.localStorage.getItem(LEGACY_COPY_IMPORT_URL_OPTIONS_STORAGE_KEY)
     if (!saved) return DEFAULT_COPY_IMPORT_URL_OPTIONS
+    if (!window.localStorage.getItem(COPY_IMPORT_URL_OPTIONS_STORAGE_KEY)) {
+      window.localStorage.setItem(COPY_IMPORT_URL_OPTIONS_STORAGE_KEY, saved)
+    }
 
     const parsed = JSON.parse(saved) as Partial<CopyImportUrlOptions> | null
     if (!parsed || typeof parsed !== 'object') return DEFAULT_COPY_IMPORT_URL_OPTIONS

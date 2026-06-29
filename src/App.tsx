@@ -23,14 +23,24 @@ import { FavoriteCollectionPickerModal, FavoriteCollectionsView, ManageCollectio
 import { useGlobalClickSuppression } from './lib/clickSuppression'
 
 let customProviderConfigUrlImportStarted = false
-const DYNAMIC_BACKGROUND_STORAGE_KEY = 'gpt-image-playground:dynamic-background-enabled'
+const DYNAMIC_BACKGROUND_STORAGE_KEY = 'gpt-image-2-for-tjh:dynamic-background-enabled'
+const LEGACY_DYNAMIC_BACKGROUND_STORAGE_KEY = 'gpt-image-' + 'playground:dynamic-background-enabled'
 const STATIC_BACKGROUND_MANIFEST_URL = '/wallpapers/background-wallpapers.json'
 const DEFAULT_DYNAMIC_BACKGROUND_URL = '/wallpapers/dynamic/page-background.mp4'
 const DEFAULT_STATIC_BACKGROUND_URL = '/wallpapers/static/page-background-az.png'
 
 function getInitialDynamicBackgroundEnabled() {
   try {
-    return window.localStorage.getItem(DYNAMIC_BACKGROUND_STORAGE_KEY) !== 'false'
+    const saved = window.localStorage.getItem(DYNAMIC_BACKGROUND_STORAGE_KEY)
+    if (saved !== null) return saved !== 'false'
+
+    const legacySaved = window.localStorage.getItem(LEGACY_DYNAMIC_BACKGROUND_STORAGE_KEY)
+    if (legacySaved !== null) {
+      window.localStorage.setItem(DYNAMIC_BACKGROUND_STORAGE_KEY, legacySaved)
+      return legacySaved !== 'false'
+    }
+
+    return true
   } catch {
     return true
   }
