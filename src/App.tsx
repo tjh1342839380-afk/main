@@ -26,7 +26,7 @@ let customProviderConfigUrlImportStarted = false
 const DYNAMIC_BACKGROUND_STORAGE_KEY = 'gpt-image-2-for-tjh:dynamic-background-enabled'
 const LEGACY_DYNAMIC_BACKGROUND_STORAGE_KEY = 'gpt-image-' + 'playground:dynamic-background-enabled'
 const STATIC_BACKGROUND_MANIFEST_URL = '/wallpapers/background-wallpapers.json'
-const DEFAULT_DYNAMIC_BACKGROUND_URL = '/wallpapers/dynamic/%2Bproduction%20ID_4611805_13.mp4'
+const DEFAULT_DYNAMIC_BACKGROUND_URL = '/wallpapers/dynamic/page-background.mp4'
 const DEFAULT_STATIC_BACKGROUND_URL = '/wallpapers/static/page-background-az.png'
 
 function getInitialDynamicBackgroundEnabled() {
