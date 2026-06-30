@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { useStore } from '../store'
 import { useVersionCheck } from '../hooks/useVersionCheck'
 import { useTooltip } from '../hooks/useTooltip'
@@ -7,7 +7,7 @@ import ViewportTooltip from './ViewportTooltip'
 import HelpModal from './HelpModal'
 import HistoryModal from './HistoryModal'
 import { useFavoriteCollectionTitle } from './FavoriteCollections'
-import { EditIcon, HelpCircleIcon, HistoryIcon, ImageIcon, InstallIcon, RefreshIcon, SettingsIcon, VideoIcon } from './icons'
+import { CheckIcon, CloseIcon, EditIcon, HelpCircleIcon, HistoryIcon, ImageIcon, InstallIcon, RefreshIcon, SettingsIcon, VideoIcon } from './icons'
 
 type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>
@@ -37,6 +37,7 @@ export default function Header({ dynamicBackgroundEnabled, onToggleDynamicBackgr
   const filterFavorite = useStore((s) => s.filterFavorite)
   const activeFavoriteCollectionId = useStore((s) => s.activeFavoriteCollectionId)
   const activeConversation = agentConversations.find((item) => item.id === activeAgentConversationId)
+  const renameAgentConversation = useStore((s) => s.renameAgentConversation)
   const favoriteCollectionTitle = useFavoriteCollectionTitle()
   const showFavoriteCollectionTitle = appMode === 'gallery' && Boolean(activeFavoriteCollectionId)
   const { hasUpdate, latestRelease, dismiss } = useVersionCheck()
@@ -46,7 +47,12 @@ export default function Header({ dynamicBackgroundEnabled, onToggleDynamicBackgr
   const [hintVisible, setHintVisible] = useState(false)
   const [scrollDirection, setScrollDirection] = useState<'up' | 'down'>('up')
   const [showHistoryModal, setShowHistoryModal] = useState(false)
+  const [titleEditorOpen, setTitleEditorOpen] = useState(false)
+  const [titleDraft, setTitleDraft] = useState('')
   const historyButtonRef = useRef<HTMLButtonElement>(null)
+  const titleEditorRef = useRef<HTMLDivElement>(null)
+  const titleButtonRef = useRef<HTMLButtonElement>(null)
+  const titleInputRef = useRef<HTMLInputElement>(null)
   const createConversation = useStore((s) => s.createAgentConversation)
 
   useEffect(() => {
@@ -89,6 +95,33 @@ export default function Header({ dynamicBackgroundEnabled, onToggleDynamicBackgr
       return () => clearTimeout(timer)
     }
   }, [appMode, agentMobileHeaderVisible])
+
+  useEffect(() => {
+    if (!titleEditorOpen) return
+    setTitleDraft(activeConversation?.title || '')
+  }, [activeConversation?.id, activeConversation?.title, titleEditorOpen])
+
+  useEffect(() => {
+    if (!titleEditorOpen) return
+    const frame = window.requestAnimationFrame(() => {
+      titleInputRef.current?.focus()
+      titleInputRef.current?.select()
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [titleEditorOpen])
+
+  useEffect(() => {
+    if (!titleEditorOpen) return
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node
+      if (titleEditorRef.current?.contains(target) || titleButtonRef.current?.contains(target)) return
+      setTitleEditorOpen(false)
+    }
+
+    document.addEventListener('pointerdown', handlePointerDown)
+    return () => document.removeEventListener('pointerdown', handlePointerDown)
+  }, [titleEditorOpen])
 
   const installTooltip = useTooltip()
   const backgroundTooltip = useTooltip()
@@ -160,6 +193,38 @@ export default function Header({ dynamicBackgroundEnabled, onToggleDynamicBackgr
   const canSwitchStaticBackground = !dynamicBackgroundEnabled && staticBackgroundCount > 1
   const nextBackgroundLabel = canSwitchStaticBackground ? '\u4e0b\u4e00\u5f20\u58c1\u7eb8' : '\u6ca1\u6709\u66f4\u591a\u58c1\u7eb8'
 
+  const openTitleEditor = () => {
+    if (!activeConversation) return
+    setShowHistoryModal(false)
+    setTitleDraft(activeConversation.title || '')
+    setTitleEditorOpen(true)
+  }
+
+  const closeTitleEditor = () => setTitleEditorOpen(false)
+
+  const saveTitleEditor = () => {
+    if (!activeConversation) {
+      setTitleEditorOpen(false)
+      return
+    }
+
+    const nextTitle = titleDraft.trim()
+    if (nextTitle && nextTitle !== activeConversation.title) {
+      renameAgentConversation(activeConversation.id, nextTitle)
+    }
+    setTitleEditorOpen(false)
+  }
+
+  const handleTitleEditorKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Enter') {
+      event.preventDefault()
+      saveTitleEditor()
+    } else if (event.key === 'Escape') {
+      event.preventDefault()
+      closeTitleEditor()
+    }
+  }
+
   return (
     <>
       <header data-no-drag-select className={`liquid-glass-header safe-area-top fixed top-0 left-0 right-0 z-40 bg-white/80 dark:bg-gray-950/80 backdrop-blur border-b border-gray-200 dark:border-white/[0.08] transition-transform duration-300 ease-in-out ${appMode === 'agent' && !agentMobileHeaderVisible ? '-translate-y-full sm:translate-y-0' : 'translate-y-0'}`}>
@@ -199,7 +264,10 @@ export default function Header({ dynamicBackgroundEnabled, onToggleDynamicBackgr
               <button
                 ref={historyButtonRef}
                 type="button"
-                onClick={() => setShowHistoryModal((visible) => !visible)}
+                onClick={() => {
+                  setTitleEditorOpen(false)
+                  setShowHistoryModal((visible) => !visible)
+                }}
                 className="p-1.5 text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-white/[0.04] rounded-lg transition-colors"
                 title="历史任务"
               >
@@ -216,25 +284,21 @@ export default function Header({ dynamicBackgroundEnabled, onToggleDynamicBackgr
               >
                 <EditIcon className="w-5 h-5" />
               </button>
-              {showHistoryModal && (
-                <HistoryModal onClose={() => setShowHistoryModal(false)} ignoreOutsideClickRef={historyButtonRef} />
-              )}
             </div>}
           </div>
           {appMode === 'agent' && activeConversation && (
-            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 hidden sm:flex max-w-[30%]">
+            <div className="absolute left-1/2 top-1/2 hidden max-w-[30%] -translate-x-1/2 -translate-y-1/2 sm:flex">
               <button
+                ref={titleButtonRef}
                 type="button"
-                onClick={() => {
-                  setShowHistoryModal(true)
-                  // Use setTimeout to ensure HistoryModal is mounted before setting editing id
-                  setTimeout(() => {
-                    useStore.getState().setAgentEditingConversationId(activeConversation.id)
-                  }, 0)
-                }}
-                className="text-sm font-semibold text-gray-700 dark:text-gray-300 truncate hover:bg-gray-100 dark:hover:bg-white/[0.04] px-2 py-1 rounded transition-colors"
+                onClick={openTitleEditor}
+                className="group flex min-w-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-semibold text-gray-700 transition-colors hover:bg-white/75 hover:text-gray-950 dark:text-gray-300 dark:hover:bg-white/[0.08] dark:hover:text-white"
+                aria-haspopup="dialog"
+                aria-expanded={titleEditorOpen}
+                title="编辑对话名称"
               >
-                {activeConversation.title || 'Agent'}
+                <span className="min-w-0 truncate">{activeConversation.title || 'Agent'}</span>
+                <EditIcon className="h-3.5 w-3.5 shrink-0 text-gray-400 opacity-0 transition-opacity group-hover:opacity-100 dark:text-gray-500" />
               </button>
             </div>
           )}
@@ -377,6 +441,52 @@ export default function Header({ dynamicBackgroundEnabled, onToggleDynamicBackgr
           </div>
         </div>
       </header>
+
+      {showHistoryModal && (
+        <HistoryModal onClose={() => setShowHistoryModal(false)} ignoreOutsideClickRef={historyButtonRef} />
+      )}
+
+      {titleEditorOpen && activeConversation && (
+        <div
+          ref={titleEditorRef}
+          role="dialog"
+          aria-label="编辑对话名称"
+          className="fixed left-1/2 top-[calc(env(safe-area-inset-top,0px)+4.5rem)] z-50 hidden w-[min(24rem,calc(100vw-2rem))] -translate-x-1/2 rounded-2xl border border-white/75 bg-white/90 p-3 shadow-[0_24px_80px_rgba(15,23,42,0.18)] backdrop-blur-xl sm:block dark:border-white/[0.10] dark:bg-gray-950/92 dark:shadow-[0_24px_80px_rgba(0,0,0,0.45)]"
+        >
+          <div className="absolute left-1/2 top-0 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rotate-45 border-l border-t border-white/75 bg-white/90 dark:border-white/[0.10] dark:bg-gray-950/92" />
+          <div className="relative flex items-center gap-2">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-blue-500/15 dark:text-blue-300">
+              <EditIcon className="h-4 w-4" />
+            </div>
+            <input
+              ref={titleInputRef}
+              value={titleDraft}
+              onChange={(event) => setTitleDraft(event.target.value)}
+              onKeyDown={handleTitleEditorKeyDown}
+              className="min-w-0 flex-1 rounded-xl border border-gray-200/80 bg-white px-3 py-2 text-sm font-medium text-gray-900 outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-500/10 dark:border-white/[0.10] dark:bg-white/[0.04] dark:text-white dark:focus:border-blue-400"
+              placeholder="输入对话名称"
+              maxLength={40}
+            />
+            <button
+              type="button"
+              onClick={closeTitleEditor}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-white/[0.08] dark:hover:text-gray-200"
+              aria-label="取消"
+            >
+              <CloseIcon className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={saveTitleEditor}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-500 text-white shadow-sm transition-colors hover:bg-blue-600 disabled:cursor-not-allowed disabled:bg-gray-300 dark:disabled:bg-white/[0.08]"
+              aria-label="保存"
+              disabled={!titleDraft.trim()}
+            >
+              <CheckIcon className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
       
       {/* Hint for sliding down */}
       <div className={`fixed top-0 left-0 right-0 z-30 flex justify-center pointer-events-none transition-all duration-300 ease-in-out sm:hidden ${appMode === 'agent' && hintVisible && !agentMobileHeaderVisible ? 'translate-y-[env(safe-area-inset-top,0px)] opacity-100' : '-translate-y-full opacity-0'}`}>

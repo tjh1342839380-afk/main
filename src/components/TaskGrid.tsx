@@ -33,6 +33,8 @@ export default function TaskGrid() {
   const initialSelection = useRef<string[]>([])
   const isMac = /Mac|iPod|iPhone|iPad/.test(navigator.platform)
   const [pageIndex, setPageIndex] = useState(0)
+  const previousNewestFilteredTaskId = useRef<string | null>(null)
+  const previousFilteredTaskCount = useRef(0)
 
   const filteredTasks = useMemo(() => {
     const sorted = [...tasks].sort((a, b) => b.createdAt - a.createdAt)
@@ -46,7 +48,9 @@ export default function TaskGrid() {
   }, [tasks, searchQuery, filterStatus, filterFavorite, activeFavoriteCollectionId])
 
   const pageSize = TASKS_PER_PAGE
-  const pageCount = Math.max(1, Math.ceil(filteredTasks.length / pageSize))
+  const filteredTaskCount = filteredTasks.length
+  const newestFilteredTaskId = filteredTasks[0]?.id ?? null
+  const pageCount = Math.max(1, Math.ceil(filteredTaskCount / pageSize))
   const currentPageIndex = Math.min(pageIndex, pageCount - 1)
   const pageStart = currentPageIndex * pageSize
   const visibleTasks = useMemo(() => {
@@ -59,6 +63,24 @@ export default function TaskGrid() {
   useEffect(() => {
     setPageIndex(0)
   }, [searchQuery, filterStatus, filterFavorite, activeFavoriteCollectionId])
+
+  useEffect(() => {
+    const previousNewestTaskId = previousNewestFilteredTaskId.current
+    const previousTaskCount = previousFilteredTaskCount.current
+
+    previousNewestFilteredTaskId.current = newestFilteredTaskId
+    previousFilteredTaskCount.current = filteredTaskCount
+
+    if (
+      currentPageIndex > 0 &&
+      newestFilteredTaskId &&
+      previousNewestTaskId &&
+      newestFilteredTaskId !== previousNewestTaskId &&
+      filteredTaskCount > previousTaskCount
+    ) {
+      setPageIndex(0)
+    }
+  }, [currentPageIndex, filteredTaskCount, newestFilteredTaskId])
 
   useEffect(() => {
     setPageIndex((current) => Math.min(current, pageCount - 1))

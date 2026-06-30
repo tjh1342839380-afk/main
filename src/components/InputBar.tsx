@@ -1463,6 +1463,16 @@ export default function InputBar() {
     const el = textareaRef.current
     if (!el) return
 
+    if (!inputBarExpanded) {
+      el.style.transition = 'height 150ms ease, border-color 200ms, box-shadow 200ms'
+      el.style.height = '42px'
+      el.style.overflowY = 'hidden'
+      el.scrollTop = 0
+      setIsSingleLine(true)
+      prevHeightRef.current = 42
+      return
+    }
+
     // 计算图片区域等固定高度
     const imagesHeight = imagesRef.current?.offsetHeight ?? 0
     const fixedOverhead = imagesHeight + 140
@@ -1496,7 +1506,7 @@ export default function InputBar() {
     el.style.overflowY = desired > maxH ? 'auto' : 'hidden'
 
     prevHeightRef.current = targetH
-  }, [])
+  }, [inputBarExpanded])
 
   // 同步 prompt 至 contentEditable
   useEffect(() => {

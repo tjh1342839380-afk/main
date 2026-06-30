@@ -9,12 +9,14 @@ import { downloadImageEntriesAsZip, downloadImageIds, getImageZipEntries } from 
 import TaskCard from './TaskCard'
 import MarkdownRenderer from './MarkdownRenderer'
 import { TooltipButton as AgentActionButton } from './TooltipButton'
-import { TrashIcon, DownloadIcon, EditIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, SidebarLeftIcon, FavoriteIcon, CloseIcon, CopyIcon, RefreshIcon, ArrowDownIcon } from './icons'
+import { TrashIcon, DownloadIcon, EditIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, SidebarLeftIcon, FavoriteIcon, CloseIcon, CopyIcon, RefreshIcon, ArrowDownIcon, CheckIcon } from './icons'
 
+// 显示图像缩略图的组件
 function ChatImageThumb({ imageId, imageIndex, maskImageId }: { imageId: string; imageIndex: number; maskImageId?: string | null }) {
   const [src, setSrc] = useState<string>(() => getCachedImage(imageId) || '')
   const setLightboxImageId = useStore((s) => s.setLightboxImageId)
 
+  // 当 imageId 或 maskImageId 变化时，尝试获取图像的缓存 URL 或生成带遮罩的预览图像
   useEffect(() => {
     let cancelled = false
 
@@ -44,6 +46,7 @@ function ChatImageThumb({ imageId, imageIndex, maskImageId }: { imageId: string;
     return () => { cancelled = true }
   }, [imageId, maskImageId])
 
+  // 点击缩略图时，设置 Lightbox 显示对应的图像
   return (
     <div 
       className={`relative h-16 w-16 shrink-0 overflow-hidden rounded-lg shadow-sm cursor-pointer transition-opacity hover:opacity-90 ${
@@ -64,6 +67,7 @@ function ChatImageThumb({ imageId, imageIndex, maskImageId }: { imageId: string;
   )
 }
 
+// 显示智能助手正在生成的光标
 function AgentStreamingCursor() {
   return (
     <span
@@ -75,10 +79,12 @@ function AgentStreamingCursor() {
 
 const AGENT_STOPPED_MESSAGE = '已停止生成。'
 
+// 格式化时间戳为本地时间字符串
 function formatTime(value: number) {
   return new Date(value).toLocaleString()
 }
 
+// 显示网络搜索状态的行内文本
 function AgentWebSearchInlineStatus({ status }: { status: AgentWebSearchStatus }) {
   return (
     <span className="inline-flex text-sm font-medium text-gray-500 dark:text-gray-400">
@@ -87,6 +93,7 @@ function AgentWebSearchInlineStatus({ status }: { status: AgentWebSearchStatus }
   )
 }
 
+// 显示网络搜索状态的行
 function AgentWebSearchStatusLines({ statuses }: { statuses: AgentWebSearchStatus[] }) {
   if (statuses.length === 0) return null
   return (
@@ -100,6 +107,7 @@ function AgentWebSearchStatusLines({ statuses }: { statuses: AgentWebSearchStatu
   )
 }
 
+// 定义智能助手块的类型
 type AgentAssistantBlock =
   | { type: 'web-search'; status: AgentWebSearchStatus; key: string }
   | { type: 'batch-params'; status: AgentWebSearchStatus; key: string }
@@ -107,20 +115,24 @@ type AgentAssistantBlock =
   | { type: 'deleted-image-task'; taskId: string; key: string }
   | { type: 'text'; key: string; content?: string }
 
+// 定义智能助手轮次任务槽的接口
 interface AgentRoundTaskSlot {
   taskId: string
   task: TaskRecord | null
 }
 
+// 检查智能助手轮次是否被中断
 function isAgentRoundInterrupted(round: AgentRound | null) {
   return round?.status === 'error' && round.error === AGENT_STOPPED_MESSAGE
 }
 
+// 标记工具状态为已停止
 function markToolStatusStopped(status: AgentWebSearchStatus): AgentWebSearchStatus {
   if (status.completed) return status
   return { text: status.text.replace(/^正在/, '已停止'), completed: true }
 }
 
+// 获取输出项对应的图像任务
 function getImageTaskForOutputItem(item: ResponsesOutputItem, tasksForRound: TaskRecord[]) {
   if (item.type === 'image_generation_call') {
     return tasksForRound.find((task) => task.agentToolCallId && task.agentToolCallId === item.id) ?? null
@@ -131,11 +143,13 @@ function getImageTaskForOutputItem(item: ResponsesOutputItem, tasksForRound: Tas
   return null
 }
 
+// 获取输出项对应的批量图像任务
 function getBatchImageTasksForOutputItem(item: ResponsesOutputItem, tasksForRound: TaskRecord[]) {
   if (item.type !== 'function_call' || item.name !== 'generate_image_batch' || !item.call_id) return []
   return tasksForRound.filter((task) => task.agentBatchCallId === item.call_id)
 }
 
+// 从输出项中提取文本内容
 function getTextFromOutputItem(item: ResponsesOutputItem) {
   if (item.type !== 'message') return ''
   return (item.content ?? [])
@@ -145,6 +159,7 @@ function getTextFromOutputItem(item: ResponsesOutputItem) {
     .trim()
 }
 
+// 获取智能助手块列表
 function getAgentAssistantBlocks(round: AgentRound | null, taskSlots: AgentRoundTaskSlot[], allTasks: TaskRecord[], hasText: boolean): AgentAssistantBlock[] {
   const outputItems = getAgentRoundOutputItems(round, allTasks)
   const tasksForRound = taskSlots.map((slot) => slot.task).filter(Boolean) as TaskRecord[]
@@ -159,11 +174,13 @@ function getAgentAssistantBlocks(round: AgentRound | null, taskSlots: AgentRound
     ]
   }
 
+  // 构建智能助手块列表
   const blocks: AgentAssistantBlock[] = []
   const renderedTaskIds = new Set<string>()
   let renderedTextBlocks = 0
   let webSearchGroup: ResponsesOutputItem[] = []
 
+  // 将网络搜索调用分组并刷新到块列表中
   const flushWebSearchGroup = () => {
     if (webSearchGroup.length === 0) return
     const status = getWebSearchStatusForCalls(collectWebSearchCalls(webSearchGroup))
@@ -171,14 +188,17 @@ function getAgentAssistantBlocks(round: AgentRound | null, taskSlots: AgentRound
     webSearchGroup = []
   }
 
+  // 遍历输出项并生成对应的智能助手块
   for (const item of outputItems) {
     if (item.type === 'web_search_call') {
       webSearchGroup.push(item)
       continue
     }
 
+    // 如果当前输出项不是网络搜索调用，则刷新之前的网络搜索组
     flushWebSearchGroup()
 
+    // 检查输出项是否对应图像任务，如果是则添加到块列表中
     const imageTask = getImageTaskForOutputItem(item, tasksForRound)
     if (imageTask && !renderedTaskIds.has(imageTask.id)) {
       renderedTaskIds.add(imageTask.id)
@@ -186,6 +206,7 @@ function getAgentAssistantBlocks(round: AgentRound | null, taskSlots: AgentRound
       continue
     }
 
+    // 检查输出项是否对应批量图像任务，如果是则添加到块列表中
     const batchImageTasks = getBatchImageTasksForOutputItem(item, tasksForRound)
     if (batchImageTasks.length > 0) {
       for (const task of batchImageTasks) {
@@ -196,6 +217,7 @@ function getAgentAssistantBlocks(round: AgentRound | null, taskSlots: AgentRound
       continue
     }
 
+    // 如果当前轮次正在运行或被中断，并且输出项是批量图像生成调用，则添加批量参数块到块列表中
     if ((round?.status === 'running' || roundInterrupted) && item.type === 'function_call' && item.name === 'generate_image_batch') {
       blocks.push({
         type: 'batch-params',
@@ -207,6 +229,7 @@ function getAgentAssistantBlocks(round: AgentRound | null, taskSlots: AgentRound
       continue
     }
 
+    // 如果输出项是消息类型，则提取文本内容并添加到块列表中
     if (item.type === 'message') {
       const content = getTextFromOutputItem(item)
       if (content) {
@@ -216,8 +239,10 @@ function getAgentAssistantBlocks(round: AgentRound | null, taskSlots: AgentRound
     }
   }
 
+  // 刷新剩余的网络搜索组到块列表中
   flushWebSearchGroup()
 
+  // 如果有文本内容但没有渲染任何文本块，则添加一个回退文本块到块列表中
   if (hasText && renderedTextBlocks === 0) blocks.push({ type: 'text', key: 'text:fallback' })
   for (const slot of taskSlots) {
     if (slot.task) {
@@ -229,6 +254,7 @@ function getAgentAssistantBlocks(round: AgentRound | null, taskSlots: AgentRound
   return blocks
 }
 
+// 获取智能助手块的文本内容，如果没有文本块则返回回退内容
 function getAgentAssistantCopyContent(fallbackContent: string, blocks: AgentAssistantBlock[]) {
   if (!blocks.some((block) => block.type !== 'text')) return fallbackContent
 
@@ -241,6 +267,7 @@ function getAgentAssistantCopyContent(fallbackContent: string, blocks: AgentAssi
   return parts.length > 0 ? parts.join('\n\n') : fallbackContent
 }
 
+// 获取对话的搜索文本，包括标题、消息内容和轮次提示
 function getConversationSearchText(conversation: AgentConversation) {
   return [
     conversation.title,
@@ -249,11 +276,13 @@ function getConversationSearchText(conversation: AgentConversation) {
   ].join('\n').toLocaleLowerCase()
 }
 
+// 获取轮次的任务列表，如果轮次为空则返回空数组
 function getRoundTasks(round: AgentRound | null, tasks: TaskRecord[]) {
   if (!round) return []
   return round.outputTaskIds.map((taskId) => tasks.find((task) => task.id === taskId) ?? null)
 }
 
+// 获取轮次的任务槽列表，如果轮次为空则返回空数组
 function getRoundTaskSlots(round: AgentRound | null, tasks: TaskRecord[]): AgentRoundTaskSlot[] {
   if (!round) return []
   return round.outputTaskIds.map((taskId) => ({
@@ -262,14 +291,17 @@ function getRoundTaskSlots(round: AgentRound | null, tasks: TaskRecord[]): Agent
   }))
 }
 
+// 定义移动端下拉刷新阈值和最大偏移量
 const MOBILE_HEADER_PULL_THRESHOLD = 24
 const MOBILE_HEADER_PULL_MAX_OFFSET = 48
 const MOBILE_HEADER_EDGE_GUARD = 24
 
+// 获取页面滚动的垂直偏移量
 function getPageScrollTop() {
   return window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0
 }
 
+// AgentWorkspace 组件是智能助手工作区的主要组件，负责显示对话列表、消息内容、轮次信息以及相关操作。
 export default function AgentWorkspace() {
   const conversations = useStore((s) => s.agentConversations)
   const conversationsLoaded = useStore((s) => s.agentConversationsLoaded)
@@ -302,6 +334,9 @@ export default function AgentWorkspace() {
   const agentGeneratingTitleIds = useStore((s) => s.agentGeneratingTitleIds)
   const conversation = conversations.find((item) => item.id === activeConversationId) ?? null
   const [editingConversationTitle, setEditingConversationTitle] = useState('')
+  const [mobileTitleEditorOpen, setMobileTitleEditorOpen] = useState(false)
+  const [mobileTitleDraft, setMobileTitleDraft] = useState('')
+  const mobileTitleInputRef = useRef<HTMLInputElement>(null)
 
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const bottomSentinelRef = useRef<HTMLDivElement>(null)
@@ -317,6 +352,7 @@ export default function AgentWorkspace() {
   const autoScrollStateRef = useRef<{ conversationId: string | null; lastUserMessageSignature: string | null }>({ conversationId: null, lastUserMessageSignature: null })
   const errorCopyPointerDownRef = useRef<{ x: number; y: number } | null>(null)
 
+  // 更新是否滚动到底部的状态
   const updateIsScrolledToBottom = useCallback(() => {
     const sentinel = bottomSentinelRef.current
     if (appMode !== 'agent' || !sentinel) {
@@ -324,17 +360,21 @@ export default function AgentWorkspace() {
       return
     }
 
+    // 计算视口高度，优先使用 visualViewport 的高度，如果不可用则使用 window.innerHeight
     const viewportHeight = window.visualViewport?.height ?? window.innerHeight
     setIsScrolledToBottom(sentinel.getBoundingClientRect().top <= viewportHeight + 24)
   }, [appMode])
 
+  // 滚动到智能助手的底部
   const scrollToAgentBottom = useCallback(() => {
     const scrollingElement = document.scrollingElement ?? document.documentElement
     window.scrollTo({ top: scrollingElement.scrollHeight, behavior: 'smooth' })
   }, [])
 
+  // 处理触摸开始事件，用于移动端下拉刷新
   const handleTouchStart = (e: React.TouchEvent) => {
     const touchY = e.touches[0]?.clientY ?? -1
+    // 如果当前不是智能助手模式，或者移动端头部已经可见，或者页面已经滚动，或者触摸位置在边缘保护区域内，则不处理下拉刷新
     if (
       appMode !== 'agent' ||
       agentMobileHeaderVisible ||
@@ -349,10 +389,12 @@ export default function AgentWorkspace() {
     touchStartY.current = touchY
   }
 
+  // 处理触摸开始事件，用于移动端下拉刷新头部
   const handleHeaderTouchStart = (e: React.TouchEvent) => {
     touchStartY.current = e.touches[0].clientY
   }
    
+  // 处理触摸移动事件，用于移动端下拉刷新头部
   const handleTouchMove = (e: React.TouchEvent) => {
     if (touchStartY.current <= 0 || agentMobileHeaderVisible) return
 
@@ -373,6 +415,7 @@ export default function AgentWorkspace() {
     setPullDownOffset(Math.min(diff, MOBILE_HEADER_PULL_MAX_OFFSET))
   }
 
+  // 处理触摸结束事件，用于移动端下拉刷新头部
   const handleTouchEnd = (e: React.TouchEvent) => {
     if (touchStartY.current > 0 && !agentMobileHeaderVisible) {
       const touchEndY = e.changedTouches[0].clientY
@@ -382,12 +425,14 @@ export default function AgentWorkspace() {
     touchStartY.current = -1
   }
 
+  // 当侧边栏折叠时，清除正在编辑的对话 ID
   useEffect(() => {
     if (sidebarCollapsed) {
       setAgentEditingConversationId(null)
     }
   }, [sidebarCollapsed, setAgentEditingConversationId])
 
+  // 当应用模式为智能助手时，添加或移除禁止下拉刷新的类名
   useEffect(() => {
     if (appMode !== 'agent') return
 
@@ -395,6 +440,7 @@ export default function AgentWorkspace() {
     return () => document.documentElement.classList.remove('agent-no-pull-refresh')
   }, [appMode])
 
+  // 当移动端头部可见时，添加事件监听器以隐藏头部
   useEffect(() => {
     if (!agentMobileHeaderVisible || appMode !== 'agent') return
 
@@ -413,6 +459,7 @@ export default function AgentWorkspace() {
     }
   }, [agentMobileHeaderVisible, appMode, setAgentMobileHeaderVisible])
 
+  // 当应用模式为智能助手时，添加滚动和调整大小的事件监听器，以更新是否滚动到底部的状态，并根据滚动位置显示或隐藏移动端顶部栏
   useEffect(() => {
     if (appMode !== 'agent') return
 
@@ -447,6 +494,7 @@ export default function AgentWorkspace() {
     window.addEventListener('resize', updateIsScrolledToBottom)
     visualViewport?.addEventListener('resize', updateIsScrolledToBottom)
 
+    // 清理事件监听器和取消动画帧
     return () => {
       window.cancelAnimationFrame(initialFrame)
       window.removeEventListener('scroll', handleScroll)
@@ -455,10 +503,11 @@ export default function AgentWorkspace() {
     }
   }, [appMode, updateIsScrolledToBottom])
 
+  // 当应用模式为智能助手时，确保至少有一个对话存在，如果没有则创建一个新的对话
   useEffect(() => {
     if (appMode !== 'agent') return
     if (!conversationsLoaded) return
-    
+    // 如果没有对话，则创建一个新的对话；如果有对话但没有选中的对话，则选择最新的对话或创建一个新的对话
     if (conversations.length === 0) {
       createConversation()
     } else if (!conversation) {
@@ -471,11 +520,13 @@ export default function AgentWorkspace() {
     }
   }, [appMode, conversationsLoaded, conversations, conversation, createConversation, setActiveConversationId])
 
+  // 对话列表按更新时间降序排序
   const sortedConversations = useMemo(
     () => [...conversations].sort((a, b) => b.updatedAt - a.updatedAt),
     [conversations],
   )
 
+  // 根据搜索查询过滤对话列表，如果没有查询则返回排序后的对话列表
   const filteredConversations = useMemo(() => {
     const query = conversationSearchQuery.trim().toLocaleLowerCase()
     if (!query) return sortedConversations
@@ -486,7 +537,8 @@ export default function AgentWorkspace() {
     () => conversation ? getActiveAgentRounds(conversation) : [],
     [conversation],
   )
-
+ 
+  // 根据当前对话和活动轮次获取活动消息列表，包括用户消息和助手消息
   const activeMessages = useMemo(() => {
     if (!conversation) return []
     const messages: AgentMessage[] = []
@@ -501,6 +553,7 @@ export default function AgentWorkspace() {
     return messages
   }, [activeRounds, conversation])
 
+  // 当活动消息列表、应用模式或滚动设置发生变化时，检查是否需要自动滚动到底部，如果需要则调用 scrollToAgentBottom 函数
   useEffect(() => {
     const conversationId = conversation?.id ?? null
     const lastMessage = activeMessages[activeMessages.length - 1] ?? null
@@ -524,11 +577,13 @@ export default function AgentWorkspace() {
     return () => window.cancelAnimationFrame(frame)
   }, [activeMessages, agentScrollToBottomAfterSubmit, appMode, conversation?.id, scrollToAgentBottom])
 
+  // 当活动消息或活动轮次发生变化时，使用 requestAnimationFrame 更新是否滚动到底部的状态
   useEffect(() => {
     const frame = window.requestAnimationFrame(updateIsScrolledToBottom)
     return () => window.cancelAnimationFrame(frame)
   }, [activeMessages, activeRounds, updateIsScrolledToBottom])
 
+  // 当活动消息或滚动目标轮次发生变化时，使用 requestAnimationFrame 滚动到指定的轮次元素，并在滚动完成后清除滚动目标轮次
   useEffect(() => {
     if (!scrollTargetRoundId) return
     const id = window.requestAnimationFrame(() => {
@@ -538,6 +593,7 @@ export default function AgentWorkspace() {
     return () => window.cancelAnimationFrame(id)
   }, [activeMessages, scrollTargetRoundId])
 
+  // 处理切换轮次的操作，根据当前轮次和方向获取兄弟轮次，并设置下一个活动轮次和滚动目标轮次
   const handleSwitchBranch = (round: AgentRound, direction: -1 | 1) => {
     if (!conversation) return
     const siblings = getAgentSiblingRounds(conversation, round)
@@ -550,6 +606,7 @@ export default function AgentWorkspace() {
     setScrollTargetRoundId(nextRound.id)
   }
 
+  // 处理删除对话的操作，查找相关的轮次和任务，并显示确认对话框，允许用户选择是否同时删除生成的图片
   const handleDeleteConversation = (id: string) => {
     const targetConversation = conversations.find((item) => item.id === id) ?? null
     const roundIds = new Set(targetConversation?.rounds.map((round) => round.id) ?? [])
@@ -567,6 +624,7 @@ export default function AgentWorkspace() {
         .flatMap((task) => task.outputImages || []),
     ).size
 
+    // 显示确认对话框，提示用户是否删除对话，并提供选项同时删除生成的图片
     setConfirmDialog({
       title: '删除对话',
       message: '确定要删除这个 Agent 对话吗？',
@@ -583,6 +641,7 @@ export default function AgentWorkspace() {
     })
   }
 
+  // 处理重命名对话的操作，如果当前对话正在生成标题，则显示提示信息，否则设置正在编辑的对话 ID 和当前标题
   const startRenameConversation = (e: ReactMouseEvent | React.TouchEvent, id: string, currentTitle: string) => {
     e.stopPropagation()
     if (agentGeneratingTitleIds[id]) {
@@ -593,11 +652,47 @@ export default function AgentWorkspace() {
     setEditingConversationTitle(currentTitle)
   }
 
+  // 确认重命名对话的操作，如果当前正在编辑的对话 ID 和标题有效，并且没有正在生成标题，则调用重命名函数，否则清除正在编辑的对话 ID
   const confirmRenameConversation = () => {
     if (agentEditingConversationId && editingConversationTitle.trim() && !agentGeneratingTitleIds[agentEditingConversationId]) {
       renameConversation(agentEditingConversationId, editingConversationTitle.trim())
     }
     setAgentEditingConversationId(null)
+  }
+
+  // 处理移动端标题编辑器的打开操作，如果当前对话存在且没有正在生成标题，则设置移动端标题草稿和打开状态
+  const openMobileTitleEditor = () => {
+    if (!conversation) return
+    if (agentGeneratingTitleIds[conversation.id]) {
+      showToast('标题生成中，暂不能修改标题', 'info')
+      return
+    }
+    setSidebarCollapsed(true)
+    setMobileTitleDraft(conversation.title || '')
+    setMobileTitleEditorOpen(true)
+  }
+
+  const closeMobileTitleEditor = () => setMobileTitleEditorOpen(false)
+
+  // 保存移动端标题编辑器的操作，如果当前对话存在且草稿标题有效且不同于原始标题，则调用重命名函数，否则关闭编辑器
+  const saveMobileTitleEditor = () => {
+    if (!conversation) {
+      setMobileTitleEditorOpen(false)
+      return
+    }
+    const nextTitle = mobileTitleDraft.trim()
+    if (nextTitle && nextTitle !== conversation.title) renameConversation(conversation.id, nextTitle)
+    setMobileTitleEditorOpen(false)
+  }
+
+  const handleMobileTitleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      saveMobileTitleEditor()
+    } else if (e.key === 'Escape') {
+      e.preventDefault()
+      closeMobileTitleEditor()
+    }
   }
 
   const handleRenameKeyDown = (e: React.KeyboardEvent) => {
@@ -619,6 +714,19 @@ export default function AgentWorkspace() {
       }
     }
   }, [agentEditingConversationId, conversations])
+
+  useEffect(() => {
+    if (!mobileTitleEditorOpen) return
+    const frame = window.requestAnimationFrame(() => {
+      mobileTitleInputRef.current?.focus()
+      mobileTitleInputRef.current?.select()
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [mobileTitleEditorOpen])
+
+  useEffect(() => {
+    setMobileTitleEditorOpen(false)
+  }, [activeConversationId])
 
   const clearConversationLongPressTimer = () => {
     if (conversationLongPressTimer.current == null) return
@@ -920,21 +1028,68 @@ export default function AgentWorkspace() {
             </button>
             <button
               type="button"
-              onClick={() => {
-                setSidebarCollapsed(false)
-                if (conversation) {
-                  useStore.getState().setAgentEditingConversationId(conversation.id)
-                }
-              }}
-              className="text-sm font-semibold text-gray-700 dark:text-gray-300 truncate flex-1 text-center px-2 hover:bg-gray-100 dark:hover:bg-white/[0.04] rounded transition-colors"
+              onClick={openMobileTitleEditor}
+              className="group flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded px-2 text-center text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/[0.04]"
+              aria-haspopup="dialog"
+              aria-expanded={mobileTitleEditorOpen}
             >
-              {conversation?.title || 'Agent'}
+              <span className="min-w-0 truncate">{conversation?.title || 'Agent'}</span>
+              <EditIcon className="h-3.5 w-3.5 shrink-0 text-gray-400 opacity-0 transition-opacity group-hover:opacity-100" />
             </button>
             <button type="button" onClick={createConversation} className="p-2 text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-white/[0.04] rounded-lg transition-colors" title="新对话">
               <EditIcon className="w-5 h-5" />
             </button>
           </div>
         </div>
+
+        {mobileTitleEditorOpen && (
+          <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/20 px-4 pt-[calc(env(safe-area-inset-top,0px)+4.75rem)] backdrop-blur-[2px] sm:hidden" role="presentation" onMouseDown={closeMobileTitleEditor}>
+            <div
+              role="dialog"
+              aria-label="编辑对话名称"
+              className="w-full max-w-sm rounded-2xl border border-white/70 bg-white/95 p-3 shadow-[0_24px_80px_rgba(15,23,42,0.24)] backdrop-blur-xl dark:border-white/[0.10] dark:bg-gray-950/95 dark:shadow-[0_24px_80px_rgba(0,0,0,0.45)]"
+              onMouseDown={(event) => event.stopPropagation()}
+            >
+              <div className="mb-3 flex items-center gap-2 px-1">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-blue-500/15 dark:text-blue-300">
+                  <EditIcon className="h-4 w-4" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold text-gray-900 dark:text-white">编辑对话名称</div>
+                  <div className="text-xs text-gray-500 dark:text-gray-400">只修改当前 Agent 会话标题</div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  ref={mobileTitleInputRef}
+                  value={mobileTitleDraft}
+                  onChange={(event) => setMobileTitleDraft(event.target.value)}
+                  onKeyDown={handleMobileTitleKeyDown}
+                  className="min-w-0 flex-1 rounded-xl border border-gray-200/80 bg-white px-3 py-2.5 text-sm font-medium text-gray-900 outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-500/10 dark:border-white/[0.10] dark:bg-white/[0.04] dark:text-white dark:focus:border-blue-400"
+                  placeholder="输入对话名称"
+                  maxLength={40}
+                />
+                <button
+                  type="button"
+                  onClick={closeMobileTitleEditor}
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-white/[0.08] dark:hover:text-gray-200"
+                  aria-label="取消"
+                >
+                  <CloseIcon className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={saveMobileTitleEditor}
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-500 text-white shadow-sm transition-colors hover:bg-blue-600 disabled:cursor-not-allowed disabled:bg-gray-300 dark:disabled:bg-white/[0.08]"
+                  aria-label="保存"
+                  disabled={!mobileTitleDraft.trim()}
+                >
+                  <CheckIcon className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div 
           ref={scrollContainerRef}

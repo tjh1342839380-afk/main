@@ -227,7 +227,7 @@ export default function HistoryModal({ onClose, ignoreOutsideClickRef }: History
   return (
     <div 
       ref={modalRef}
-      className="absolute top-12 left-0 w-80 sm:w-96 max-w-[calc(100vw-2rem)] max-h-[70vh] bg-white dark:bg-[#1c1c1e] rounded-xl shadow-2xl overflow-hidden flex flex-col border border-gray-200 dark:border-white/10 z-50 text-gray-900 dark:text-gray-200 animate-dropdown-down"
+      className="fixed left-[max(0.75rem,calc((100vw-80rem)/2+0.75rem))] top-[calc(env(safe-area-inset-top,0px)+4.5rem)] z-50 flex max-h-[70vh] w-80 max-w-[calc(100vw-1.5rem)] flex-col overflow-hidden rounded-2xl border border-white/70 bg-white/95 text-gray-900 shadow-[0_24px_80px_rgba(15,23,42,0.22)] backdrop-blur-xl animate-dropdown-down sm:w-96 dark:border-white/10 dark:bg-[#1c1c1e]/95 dark:text-gray-200 dark:shadow-[0_24px_80px_rgba(0,0,0,0.45)]"
     >
       <div className="flex items-center justify-between p-3 border-b border-gray-200 dark:border-white/10 shrink-0">
         <input 
