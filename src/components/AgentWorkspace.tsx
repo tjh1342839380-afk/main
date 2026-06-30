@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useRef, useCallback, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useState, useRef, useCallback, type CSSProperties, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from 'react'
 import type { AgentConversation, AgentMessage, AgentRound, ResponsesOutputItem, TaskRecord } from '../types'
 import { deleteAgentRoundFromConversation, editOutputs, getActiveAgentRounds, getAgentBranchLeafId, getAgentSiblingRounds, getCachedImage, ensureImageCached, regenerateAgentAssistantMessage, remapAgentRoundMentionsForPathChange, removeMultipleTasks, removeTask, reuseConfig, useStore } from '../store'
 import { getPromptMentionParts } from '../lib/promptImageMentions'
@@ -295,6 +295,7 @@ function getRoundTaskSlots(round: AgentRound | null, tasks: TaskRecord[]): Agent
 const MOBILE_HEADER_PULL_THRESHOLD = 24
 const MOBILE_HEADER_PULL_MAX_OFFSET = 48
 const MOBILE_HEADER_EDGE_GUARD = 24
+const AGENT_MESSAGE_INPUT_CLIP_GAP = 84
 
 // 获取页面滚动的垂直偏移量
 function getPageScrollTop() {
@@ -339,7 +340,6 @@ export default function AgentWorkspace() {
   const mobileTitleInputRef = useRef<HTMLInputElement>(null)
 
   const scrollContainerRef = useRef<HTMLDivElement>(null)
-  const bottomSentinelRef = useRef<HTMLDivElement>(null)
   const messageRefs = useRef(new Map<string, HTMLElement>())
   const [scrollTargetRoundId, setScrollTargetRoundId] = useState<string | null>(null)
   const [pullDownOffset, setPullDownOffset] = useState(0)
@@ -350,25 +350,29 @@ export default function AgentWorkspace() {
   const touchStartY = useRef(-1)
   const conversationLongPressTimer = useRef<number | null>(null)
   const autoScrollStateRef = useRef<{ conversationId: string | null; lastUserMessageSignature: string | null }>({ conversationId: null, lastUserMessageSignature: null })
+  const isScrolledToBottomRef = useRef(true)
   const errorCopyPointerDownRef = useRef<{ x: number; y: number } | null>(null)
+  const agentWorkspaceStyle = { '--agent-message-input-clip-gap': `${AGENT_MESSAGE_INPUT_CLIP_GAP}px` } as CSSProperties
 
   // 更新是否滚动到底部的状态
   const updateIsScrolledToBottom = useCallback(() => {
-    const sentinel = bottomSentinelRef.current
-    if (appMode !== 'agent' || !sentinel) {
+    const container = scrollContainerRef.current
+    if (appMode !== 'agent' || !container) {
       setIsScrolledToBottom(true)
       return
     }
 
-    // 计算视口高度，优先使用 visualViewport 的高度，如果不可用则使用 window.innerHeight
-    const viewportHeight = window.visualViewport?.height ?? window.innerHeight
-    setIsScrolledToBottom(sentinel.getBoundingClientRect().top <= viewportHeight + 24)
+    const remaining = container.scrollHeight - container.scrollTop - container.clientHeight
+    const nextIsBottom = remaining <= 24
+    isScrolledToBottomRef.current = nextIsBottom
+    setIsScrolledToBottom(nextIsBottom)
   }, [appMode])
 
   // 滚动到智能助手的底部
-  const scrollToAgentBottom = useCallback(() => {
-    const scrollingElement = document.scrollingElement ?? document.documentElement
-    window.scrollTo({ top: scrollingElement.scrollHeight, behavior: 'smooth' })
+  const scrollToAgentBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
+    const container = scrollContainerRef.current
+    if (!container) return
+    container.scrollTo({ top: container.scrollHeight, behavior })
   }, [])
 
   // 处理触摸开始事件，用于移动端下拉刷新
@@ -378,7 +382,7 @@ export default function AgentWorkspace() {
     if (
       appMode !== 'agent' ||
       agentMobileHeaderVisible ||
-      getPageScrollTop() > 0 ||
+      (scrollContainerRef.current?.scrollTop ?? getPageScrollTop()) > 0 ||
       touchY < MOBILE_HEADER_EDGE_GUARD
     ) {
       touchStartY.current = -1
@@ -437,6 +441,7 @@ export default function AgentWorkspace() {
     if (appMode !== 'agent') return
 
     document.documentElement.classList.add('agent-no-pull-refresh')
+    window.scrollTo({ top: 0, behavior: 'auto' })
     return () => document.documentElement.classList.remove('agent-no-pull-refresh')
   }, [appMode])
 
@@ -463,15 +468,18 @@ export default function AgentWorkspace() {
   useEffect(() => {
     if (appMode !== 'agent') return
 
+    const container = scrollContainerRef.current
+    if (!container) return
+
     setMobileTopBarVisible(true)
-    let lastScrollY = window.scrollY
+    let lastScrollY = container.scrollTop
     let ticking = false
 
     const handleScroll = () => {
       if (ticking) return
 
       window.requestAnimationFrame(() => {
-        const currentScrollY = window.scrollY
+        const currentScrollY = container.scrollTop
         if (currentScrollY < 20) {
           setMobileTopBarVisible(true)
         } else if (currentScrollY > lastScrollY + 10) {
@@ -488,20 +496,39 @@ export default function AgentWorkspace() {
       ticking = true
     }
 
-    const initialFrame = window.requestAnimationFrame(updateIsScrolledToBottom)
+    const handleViewportChange = () => {
+      const wasPinnedToBottom = isScrolledToBottomRef.current
+      updateIsScrolledToBottom()
+      if (!wasPinnedToBottom) return
+      window.requestAnimationFrame(() => {
+        scrollToAgentBottom('auto')
+        updateIsScrolledToBottom()
+      })
+    }
+
+    const initialFrame = window.requestAnimationFrame(() => {
+      updateIsScrolledToBottom()
+    })
+    const inputBar = document.querySelector<HTMLElement>('[data-input-bar]')
+    const resizeObserver = new ResizeObserver(handleViewportChange)
+    resizeObserver.observe(container)
+    if (inputBar) resizeObserver.observe(inputBar)
     const visualViewport = window.visualViewport
-    window.addEventListener('scroll', handleScroll, { passive: true })
-    window.addEventListener('resize', updateIsScrolledToBottom)
-    visualViewport?.addEventListener('resize', updateIsScrolledToBottom)
+    container.addEventListener('scroll', handleScroll, { passive: true })
+    window.addEventListener('resize', handleViewportChange)
+    visualViewport?.addEventListener('resize', handleViewportChange)
+    visualViewport?.addEventListener('scroll', handleViewportChange)
 
     // 清理事件监听器和取消动画帧
     return () => {
       window.cancelAnimationFrame(initialFrame)
-      window.removeEventListener('scroll', handleScroll)
-      window.removeEventListener('resize', updateIsScrolledToBottom)
-      visualViewport?.removeEventListener('resize', updateIsScrolledToBottom)
+      resizeObserver.disconnect()
+      container.removeEventListener('scroll', handleScroll)
+      window.removeEventListener('resize', handleViewportChange)
+      visualViewport?.removeEventListener('resize', handleViewportChange)
+      visualViewport?.removeEventListener('scroll', handleViewportChange)
     }
-  }, [appMode, updateIsScrolledToBottom])
+  }, [appMode, scrollToAgentBottom, updateIsScrolledToBottom])
 
   // 当应用模式为智能助手时，确保至少有一个对话存在，如果没有则创建一个新的对话
   useEffect(() => {
@@ -553,33 +580,52 @@ export default function AgentWorkspace() {
     return messages
   }, [activeRounds, conversation])
 
-  // 当活动消息列表、应用模式或滚动设置发生变化时，检查是否需要自动滚动到底部，如果需要则调用 scrollToAgentBottom 函数
-  useEffect(() => {
+  // 切换会话时进入最近消息；如果用户停留在底部，流式回复和图片任务追加时继续贴底。
+  useLayoutEffect(() => {
     const conversationId = conversation?.id ?? null
     const lastMessage = activeMessages[activeMessages.length - 1] ?? null
     const lastUserMessageSignature = lastMessage?.role === 'user'
       ? `${lastMessage.id}:${lastMessage.createdAt}:${lastMessage.content}`
       : null
     const previous = autoScrollStateRef.current
-    const shouldScroll = appMode === 'agent' &&
+    const isConversationSwitch = previous.conversationId !== conversationId
+    const isNewUserMessage = appMode === 'agent' &&
       agentScrollToBottomAfterSubmit &&
       previous.conversationId === conversationId &&
       lastMessage?.role === 'user' &&
       lastUserMessageSignature != null &&
       previous.lastUserMessageSignature !== lastUserMessageSignature
+    const shouldKeepPinned = appMode === 'agent' &&
+      previous.conversationId === conversationId &&
+      isScrolledToBottomRef.current &&
+      activeMessages.length > 0
+    const shouldScroll = appMode === 'agent' &&
+      activeMessages.length > 0 &&
+      (isConversationSwitch || isNewUserMessage || shouldKeepPinned)
 
     autoScrollStateRef.current = { conversationId, lastUserMessageSignature }
     if (!shouldScroll) return
 
-    const frame = window.requestAnimationFrame(() => {
-      scrollToAgentBottom()
+    let autoScrollRepairFrame: number | null = null
+    const firstFrame = window.requestAnimationFrame(() => {
+      scrollToAgentBottom(isConversationSwitch ? 'auto' : 'smooth')
+      const secondFrame = window.requestAnimationFrame(() => {
+        scrollToAgentBottom('auto')
+        updateIsScrolledToBottom()
+      })
+      autoScrollRepairFrame = secondFrame
     })
-    return () => window.cancelAnimationFrame(frame)
-  }, [activeMessages, agentScrollToBottomAfterSubmit, appMode, conversation?.id, scrollToAgentBottom])
+    return () => {
+      window.cancelAnimationFrame(firstFrame)
+      if (autoScrollRepairFrame !== null) window.cancelAnimationFrame(autoScrollRepairFrame)
+    }
+  }, [activeMessages, activeRounds, agentScrollToBottomAfterSubmit, appMode, conversation?.id, scrollToAgentBottom, updateIsScrolledToBottom])
 
   // 当活动消息或活动轮次发生变化时，使用 requestAnimationFrame 更新是否滚动到底部的状态
   useEffect(() => {
-    const frame = window.requestAnimationFrame(updateIsScrolledToBottom)
+    const frame = window.requestAnimationFrame(() => {
+      updateIsScrolledToBottom()
+    })
     return () => window.cancelAnimationFrame(frame)
   }, [activeMessages, activeRounds, updateIsScrolledToBottom])
 
@@ -904,7 +950,9 @@ export default function AgentWorkspace() {
   return (
     <main 
       data-agent-workspace 
-      className="safe-area-x mx-auto flex min-h-[calc(100vh-100px)] flex-col lg:flex-row max-w-7xl lg:gap-3 px-3 lg:px-0 relative overflow-visible transition-all duration-300"
+      data-agent-mobile-header-visible={agentMobileHeaderVisible ? 'true' : undefined}
+      className="agent-workspace-shell safe-area-x mx-auto flex min-h-0 flex-col lg:flex-row max-w-7xl lg:gap-3 px-3 lg:px-0 relative transition-all duration-300"
+      style={agentWorkspaceStyle}
     >
       {/* Pull Down Indicator */}
       {pullDownOffset > 0 && !agentMobileHeaderVisible && (
@@ -1014,7 +1062,7 @@ export default function AgentWorkspace() {
       </aside>
 
       {/* Center Chat Area */}
-      <section className="min-w-0 flex-1 flex flex-col relative">
+      <section className="min-w-0 min-h-0 flex-1 flex flex-col relative">
         {/* Mobile Header Toggles */}
         <div className={`sticky top-0 z-20 lg:hidden overflow-hidden transition-all duration-300 ease-in-out ${mobileTopBarVisible ? 'max-h-16 opacity-100 mb-2' : 'max-h-0 opacity-0 mb-0 pointer-events-none'}`}>
           <div
@@ -1093,7 +1141,7 @@ export default function AgentWorkspace() {
 
         <div 
           ref={scrollContainerRef}
-          className="flex-1 space-y-4 overflow-visible pb-[calc(var(--input-bar-clearance,12rem)+1.5rem)] px-1 lg:pt-14 lg:px-4"
+          className="agent-message-scroll-viewport flex-1 space-y-4 px-1 pb-6 lg:pt-14 lg:px-4"
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
@@ -1383,12 +1431,11 @@ export default function AgentWorkspace() {
               )
             })()
           )}
-          <div ref={bottomSentinelRef} aria-hidden="true" />
         </div>
 
         <button
-          onClick={scrollToAgentBottom}
-          className={`fixed bottom-[calc(var(--input-bar-clearance,12rem)+1.5rem)] left-1/2 -translate-x-1/2 z-30 flex h-10 w-10 items-center justify-center rounded-full bg-white/90 backdrop-blur shadow-[0_2px_12px_rgba(0,0,0,0.1)] border border-gray-200/50 text-gray-500 transition-all duration-300 hover:bg-gray-50 hover:text-gray-800 dark:border-white/[0.08] dark:bg-gray-800/90 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-200 ${
+          onClick={() => scrollToAgentBottom()}
+          className={`fixed bottom-[calc(var(--input-bar-clearance,12rem)+1.75rem)] left-1/2 -translate-x-1/2 z-30 flex h-10 w-10 items-center justify-center rounded-full bg-white/90 backdrop-blur shadow-[0_2px_12px_rgba(0,0,0,0.1)] border border-gray-200/50 text-gray-500 transition-all duration-300 hover:bg-gray-50 hover:text-gray-800 dark:border-white/[0.08] dark:bg-gray-800/90 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-200 ${
             !isScrolledToBottom && activeMessages.length > 0 ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0 pointer-events-none'
           }`}
           aria-label="滚动到底部"

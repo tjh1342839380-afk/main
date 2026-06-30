@@ -11,31 +11,10 @@ import { dismissAllTooltips } from '../lib/tooltipDismiss'
 import { downloadImageEntriesAsZip, downloadImageIds, getImageZipEntries } from '../lib/downloadImages'
 import { isAgentTaskPromptPending } from '../lib/taskPromptDisplay'
 import { replaceImageMentionsForApi } from '../lib/promptImageMentions'
-import { DEFAULT_RESPONSES_MODEL, getAgentTextApiProfile, validateApiProfile } from '../lib/apiProfiles'
-import { callRevisedPromptTranslationApi } from '../lib/agentApi'
+import { useTranslatedPrompt } from '../hooks/useTranslatedPrompt'
 import { CloseIcon, CodeIcon, CopyIcon, DownloadIcon, EditIcon, LinkIcon, TrashIcon } from './icons'
 
 import ViewportTooltip from './ViewportTooltip'
-
-const revisedPromptTranslationCache = new Map<string, string>()
-const revisedPromptTranslationFailures = new Set<string>()
-
-function shouldTranslateRevisedPrompt(text: string) {
-  const latinCount = text.match(/[A-Za-z]/g)?.length ?? 0
-  const chineseCount = text.match(/[\u3400-\u9fff]/g)?.length ?? 0
-  if (latinCount < 16) return false
-  return chineseCount === 0 || latinCount / Math.max(chineseCount, 1) >= 2.5
-}
-
-function getRevisedPromptTranslationProfile(settings: Parameters<typeof getAgentTextApiProfile>[0]) {
-  const profile = getAgentTextApiProfile(settings)
-  if (!profile || profile.provider !== 'openai') return null
-
-  const candidate = profile.apiMode === 'responses'
-    ? profile
-    : { ...profile, apiMode: 'responses' as const, model: DEFAULT_RESPONSES_MODEL, streamImages: false }
-  return validateApiProfile(candidate) ? null : candidate
-}
 
 export default function DetailModal() {
   const tasks = useStore((s) => s.tasks)
@@ -60,8 +39,6 @@ export default function DetailModal() {
   const [showRawUrlsModal, setShowRawUrlsModal] = useState(false)
   const [showRawResponseModal, setShowRawResponseModal] = useState(false)
   const [streamPreviewLoaded, setStreamPreviewLoaded] = useState(false)
-  const [revisedPromptTranslations, setRevisedPromptTranslations] = useState<Record<string, string>>({})
-  const [translatingRevisedPrompt, setTranslatingRevisedPrompt] = useState('')
   const modalRef = useRef<HTMLDivElement>(null)
   const rawUrlsModalRef = useRef<HTMLDivElement>(null)
   const rawResponseModalRef = useRef<HTMLDivElement>(null)
@@ -212,6 +189,19 @@ export default function DetailModal() {
     : ''
   const promptSentToApi = task ? replaceImageMentionsForApi(requestPrompt, task.inputImageIds.length).trim() : ''
   const showRevisedPrompt = Boolean(currentRevisedPrompt && currentRevisedPrompt !== promptSentToApi)
+  const isAgentTask = task ? task.sourceMode === 'agent' || Boolean(task.agentConversationId || task.agentRoundId) : false
+  const promptTranslation = useTranslatedPrompt({
+    text: task?.prompt ?? '',
+    settings,
+    enabled: Boolean(task && isAgentTask && !isAgentTaskPromptPending(task)),
+    logLabel: 'Agent 提示词',
+  })
+  const revisedPromptTranslation = useTranslatedPrompt({
+    text: currentRevisedPrompt,
+    settings,
+    enabled: Boolean(showRevisedPrompt && currentRevisedPrompt),
+    logLabel: 'revised_prompt',
+  })
 
   useEffect(() => {
     const outputImageIds = task?.outputImages ?? []
@@ -261,64 +251,8 @@ export default function DetailModal() {
     }
   }, [maskTargetSrc, maskSrc])
 
-  useEffect(() => {
-    if (!showRevisedPrompt || !currentRevisedPrompt || !shouldTranslateRevisedPrompt(currentRevisedPrompt)) {
-      setTranslatingRevisedPrompt('')
-      return
-    }
-
-    const cached = revisedPromptTranslationCache.get(currentRevisedPrompt)
-    if (cached) {
-      setRevisedPromptTranslations((prev) =>
-        prev[currentRevisedPrompt] === cached ? prev : { ...prev, [currentRevisedPrompt]: cached },
-      )
-      setTranslatingRevisedPrompt('')
-      return
-    }
-    if (revisedPromptTranslationFailures.has(currentRevisedPrompt)) {
-      setTranslatingRevisedPrompt('')
-      return
-    }
-
-    const profile = getRevisedPromptTranslationProfile(settings)
-    if (!profile) {
-      setTranslatingRevisedPrompt('')
-      return
-    }
-
-    const controller = new AbortController()
-    setTranslatingRevisedPrompt(currentRevisedPrompt)
-    callRevisedPromptTranslationApi({
-      settings,
-      profile,
-      prompt: currentRevisedPrompt,
-      signal: controller.signal,
-    })
-      .then((text) => {
-        const translated = text.trim()
-        if (!translated) {
-          revisedPromptTranslationFailures.add(currentRevisedPrompt)
-          return
-        }
-        revisedPromptTranslationCache.set(currentRevisedPrompt, translated)
-        setRevisedPromptTranslations((prev) => ({ ...prev, [currentRevisedPrompt]: translated }))
-      })
-      .catch((err) => {
-        if (err instanceof DOMException && err.name === 'AbortError') return
-        revisedPromptTranslationFailures.add(currentRevisedPrompt)
-        console.warn('翻译 revised_prompt 失败', err)
-      })
-      .finally(() => {
-        if (controller.signal.aborted) return
-        setTranslatingRevisedPrompt((value) => value === currentRevisedPrompt ? '' : value)
-      })
-
-    return () => controller.abort()
-  }, [currentRevisedPrompt, settings, showRevisedPrompt])
-
   if (!task) return null
 
-  const isAgentTask = task.sourceMode === 'agent' || Boolean(task.agentConversationId || task.agentRoundId)
   const showPendingPrompt = isAgentTaskPromptPending(task)
   const isAgentEditTool = task.status === 'done' && String(task.agentToolAction ?? '').toLowerCase() === 'edit'
   const showReferenceSection = allInputImageIds.length > 0 || isAgentEditTool
@@ -332,11 +266,13 @@ export default function DetailModal() {
   const currentActualParams = (baseActualParams?.size || !currentImageSize)
     ? baseActualParams
     : { ...(baseActualParams ?? {}), size: currentImageSize.replace('×', 'x') }
-  const revisedPromptNeedsTranslation = shouldTranslateRevisedPrompt(currentRevisedPrompt)
-  const translatedRevisedPrompt = revisedPromptTranslations[currentRevisedPrompt] ?? revisedPromptTranslationCache.get(currentRevisedPrompt) ?? ''
-  const revisedPromptDisplayValue = revisedPromptNeedsTranslation
-    ? translatedRevisedPrompt || (translatingRevisedPrompt === currentRevisedPrompt ? '正在翻译提示词……' : currentRevisedPrompt)
-    : currentRevisedPrompt
+  const revisedPromptNeedsTranslation = revisedPromptTranslation.needsTranslation
+  const translatedRevisedPrompt = revisedPromptTranslation.translatedText
+  const revisedPromptDisplayValue = revisedPromptTranslation.displayText
+  const promptNeedsTranslation = promptTranslation.needsTranslation
+  const translatedPrompt = promptTranslation.translatedText
+  const promptDisplayValue = promptTranslation.displayText
+  const promptTooltip = promptNeedsTranslation && translatedPrompt ? 'Agent 图片提示词（已翻译）' : undefined
   const revisedPromptTooltip = revisedPromptNeedsTranslation && translatedRevisedPrompt
     ? 'API 返回提示词（已翻译）'
     : 'API 实际响应值'
@@ -413,9 +349,10 @@ export default function DetailModal() {
   }
 
   const handleCopyPrompt = async () => {
-    if (!task.prompt) return
+    const promptToCopy = translatedPrompt || task.prompt
+    if (!promptToCopy) return
     try {
-      await copyTextToClipboard(task.prompt)
+      await copyTextToClipboard(promptToCopy)
       showToast('提示词已复制', 'success')
     } catch (err) {
       showToast(getClipboardFailureMessage('复制提示词失败', err), 'error')
@@ -966,6 +903,10 @@ export default function DetailModal() {
                 <p className="text-sm text-gray-700 dark:text-gray-300">正在生成……</p>
                 <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">输入内容将在响应完成时接收</p>
               </div>
+            ) : promptDisplayValue && promptDisplayValue !== task.prompt ? (
+              <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-wrap mb-4" title={promptTooltip}>
+                {promptDisplayValue}
+              </p>
             ) : (
               <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-wrap mb-4">
                 {task.prompt || '(无提示词)'}

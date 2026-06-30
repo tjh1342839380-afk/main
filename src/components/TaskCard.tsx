@@ -5,6 +5,7 @@ import { formatImageRatio } from '../lib/size'
 import { getParamDisplay, ActualValueBadge } from '../lib/paramDisplay'
 import { DEFAULT_IMAGES_MODEL, DEFAULT_FAL_MODEL } from '../lib/apiProfiles'
 import { isAgentTaskPromptPending } from '../lib/taskPromptDisplay'
+import { useTranslatedPrompt } from '../hooks/useTranslatedPrompt'
 import { CodeIcon, TransparentBgIcon } from './icons'
 import ViewportTooltip from './ViewportTooltip'
 
@@ -316,6 +317,16 @@ export default function TaskCard({
   const nDisplay = getParamDisplay(task, 'n')
   const isAgentTask = task.sourceMode === 'agent' || Boolean(task.agentConversationId || task.agentRoundId)
   const showPendingPrompt = isAgentTaskPromptPending(task)
+  const promptTranslation = useTranslatedPrompt({
+    text: task.prompt,
+    settings,
+    enabled: isAgentTask && !showPendingPrompt,
+    logLabel: 'Agent 提示词',
+  })
+  const promptDisplayValue = promptTranslation.displayText || task.prompt
+  const promptTooltip = promptTranslation.needsTranslation && promptTranslation.translatedText
+    ? 'Agent 图片提示词（已翻译）'
+    : undefined
   const showN = !isAgentTask && (task.params.n > 1 || nDisplay.isMismatch)
   const outputErrorCount = task.outputErrors?.length ?? 0
   const outputSuccessCount = task.outputImages?.length ?? 0
@@ -544,8 +555,8 @@ export default function TaskCard({
                 <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">输入内容将在响应完成时接收</p>
               </div>
             ) : (
-              <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed line-clamp-3">
-                {task.prompt || '(无提示词)'}
+              <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed line-clamp-3" title={promptTooltip}>
+                {promptDisplayValue || '(无提示词)'}
               </p>
             )}
           </div>

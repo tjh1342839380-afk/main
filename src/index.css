@@ -224,6 +224,35 @@ body {
   backdrop-filter: blur(18px) saturate(170%);
 }
 
+.agent-workspace-shell {
+  --agent-message-top-offset: calc(var(--safe-area-top, 0px) + 3.5rem);
+  --agent-message-bottom-offset: calc(var(--input-bar-clearance, 12rem) + var(--agent-message-input-clip-gap, 84px));
+  height: calc(100dvh - var(--agent-message-top-offset) - var(--agent-message-bottom-offset));
+  max-height: calc(100dvh - var(--agent-message-top-offset) - var(--agent-message-bottom-offset));
+  overflow: hidden;
+}
+
+.agent-message-scroll-viewport {
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  -webkit-overflow-scrolling: touch;
+  transform: translateZ(0);
+  contain: layout paint;
+}
+
+@media (max-width: 639px) {
+  .agent-workspace-shell[data-agent-mobile-header-visible="true"] {
+    --agent-message-top-offset: calc(var(--safe-area-top, 0px) + 7rem);
+  }
+
+  .agent-workspace-shell:not([data-agent-mobile-header-visible="true"]) {
+    --agent-message-top-offset: 0px;
+  }
+}
+
 .detail-modal-glass-root > *:not(.detail-modal-glass-bg):not(.detail-modal-glass-scrim):not(.detail-modal-close-button) {
   position: relative;
   z-index: 1;
