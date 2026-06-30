@@ -64,7 +64,16 @@ export function buildApiUrl(
   const endpointPath = path.replace(/^\/+/, '')
 
   if (useApiProxy) {
-    return `${proxyConfig?.prefix ?? DEFAULT_PROXY_PREFIX}/${endpointPath}`
+    const proxyUrl = `${proxyConfig?.prefix ?? DEFAULT_PROXY_PREFIX}/${endpointPath}`
+    if (
+      !proxyConfig &&
+      readRuntimeEnv(import.meta.env.VITE_API_PROXY_DYNAMIC_TARGET) === 'true' &&
+      normalizedBaseUrl
+    ) {
+      const separator = proxyUrl.includes('?') ? '&' : '?'
+      return `${proxyUrl}${separator}target=${encodeURIComponent(normalizedBaseUrl)}`
+    }
+    return proxyUrl
   }
 
   const apiPath = normalizedBaseUrl.endsWith('/v1')

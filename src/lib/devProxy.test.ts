@@ -1,7 +1,11 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { buildApiUrl } from './devProxy'
 
 describe('buildApiUrl', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
   it('uses the same-origin proxy prefix when API proxy is enabled', () => {
     expect(buildApiUrl('http://api.example.com/v1', 'images/edits', null, true)).toBe(
       '/api-proxy/images/edits',
@@ -29,6 +33,14 @@ describe('buildApiUrl', () => {
         true,
       ),
     ).toBe('/openai-proxy/responses')
+  })
+
+  it('adds the configured API URL as the dynamic proxy target in production Pages deployments', () => {
+    vi.stubEnv('VITE_API_PROXY_DYNAMIC_TARGET', 'true')
+
+    expect(buildApiUrl('https://api.example.com/v1', 'responses', null, true)).toBe(
+      `/api-proxy/responses?target=${encodeURIComponent('https://api.example.com/v1')}`,
+    )
   })
 
   it('uses the configured API URL directly when API proxy is disabled', () => {
