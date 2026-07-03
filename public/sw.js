@@ -1,5 +1,20 @@
-const CACHE_NAME = 'gpt-image-2-for-tjh-v0.1.7'
+const CACHE_NAME = 'gpt-image-2-for-tjh-v0.6.10-cache-fix-20260703'
 const APP_SHELL = ['./', './index.html', './manifest.webmanifest', './brand/gpt-img-2-for-tjh-icon.png']
+
+function isCacheableResponse(url, response) {
+  if (!response.ok) return false
+
+  const contentType = response.headers.get('content-type') || ''
+  const path = url.pathname.toLowerCase()
+
+  if (path.endsWith('.css')) return contentType.includes('text/css')
+  if (path.endsWith('.js') || path.endsWith('.mjs')) return contentType.includes('javascript')
+  return !contentType.includes('text/html')
+}
+
+function isBuildAsset(url) {
+  return url.pathname.includes('/assets/')
+}
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -24,6 +39,7 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(request.url)
   if (url.origin !== self.location.origin) return
+  if (url.pathname.endsWith('/sw.js')) return
 
   if (request.mode === 'navigate') {
     event.respondWith(
@@ -38,12 +54,27 @@ self.addEventListener('fetch', (event) => {
     return
   }
 
+  if (isBuildAsset(url)) {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          if (isCacheableResponse(url, response)) {
+            const copy = response.clone()
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, copy))
+          }
+          return response
+        })
+        .catch(() => caches.match(request)),
+    )
+    return
+  }
+
   event.respondWith(
     caches.match(request).then((cached) => {
       if (cached) return cached
 
       return fetch(request).then((response) => {
-        if (response.ok) {
+        if (isCacheableResponse(url, response)) {
           const copy = response.clone()
           caches.open(CACHE_NAME).then((cache) => cache.put(request, copy))
         }
