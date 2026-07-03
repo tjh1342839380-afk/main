@@ -1194,7 +1194,7 @@ export const useStore = create<AppState>()(
           set((state) => ({
             appMode: 'agent',
             galleryInputDraft,
-            agentMobileHeaderVisible: false,
+            agentMobileHeaderVisible: true,
             agentSidebarCollapsed: true,
             agentAssetPanelCollapsed: true,
             selectedTaskIds: [],
@@ -1405,7 +1405,7 @@ export const useStore = create<AppState>()(
       agentSidebarCollapsed: true,
       agentAssetTab: 'outputs',
       agentAssetPanelCollapsed: false,
-      agentMobileHeaderVisible: false,
+      agentMobileHeaderVisible: true,
       agentEditingRoundId: null,
       agentEditingConversationId: null,
       agentGeneratingTitleIds: {},

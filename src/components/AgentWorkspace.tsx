@@ -9,7 +9,7 @@ import { downloadImageEntriesAsZip, downloadImageIds, getImageZipEntries } from 
 import TaskCard from './TaskCard'
 import MarkdownRenderer from './MarkdownRenderer'
 import { TooltipButton as AgentActionButton } from './TooltipButton'
-import { TrashIcon, DownloadIcon, EditIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, SidebarLeftIcon, FavoriteIcon, CloseIcon, CopyIcon, RefreshIcon, ArrowDownIcon, CheckIcon } from './icons'
+import { TrashIcon, DownloadIcon, EditIcon, ChevronLeftIcon, ChevronRightIcon, SidebarLeftIcon, FavoriteIcon, CloseIcon, CopyIcon, RefreshIcon, ArrowDownIcon, CheckIcon } from './icons'
 
 // 显示图像缩略图的组件
 function ChatImageThumb({ imageId, imageIndex, maskImageId }: { imageId: string; imageIndex: number; maskImageId?: string | null }) {
@@ -291,16 +291,7 @@ function getRoundTaskSlots(round: AgentRound | null, tasks: TaskRecord[]): Agent
   }))
 }
 
-// 定义移动端下拉刷新阈值和最大偏移量
-const MOBILE_HEADER_PULL_THRESHOLD = 24
-const MOBILE_HEADER_PULL_MAX_OFFSET = 48
-const MOBILE_HEADER_EDGE_GUARD = 24
 const AGENT_MESSAGE_INPUT_CLIP_GAP = 84
-
-// 获取页面滚动的垂直偏移量
-function getPageScrollTop() {
-  return window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0
-}
 
 // AgentWorkspace 组件是智能助手工作区的主要组件，负责显示对话列表、消息内容、轮次信息以及相关操作。
 export default function AgentWorkspace() {
@@ -313,7 +304,6 @@ export default function AgentWorkspace() {
   const deleteConversation = useStore((s) => s.deleteAgentConversation)
   const sidebarCollapsed = useStore((s) => s.agentSidebarCollapsed)
   const setSidebarCollapsed = useStore((s) => s.setAgentSidebarCollapsed)
-  const agentMobileHeaderVisible = useStore((s) => s.agentMobileHeaderVisible)
   const setAgentMobileHeaderVisible = useStore((s) => s.setAgentMobileHeaderVisible)
   const appMode = useStore((s) => s.appMode)
   const tasks = useStore((s) => s.tasks)
@@ -342,12 +332,10 @@ export default function AgentWorkspace() {
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const messageRefs = useRef(new Map<string, HTMLElement>())
   const [scrollTargetRoundId, setScrollTargetRoundId] = useState<string | null>(null)
-  const [pullDownOffset, setPullDownOffset] = useState(0)
   const [mobileTopBarVisible, setMobileTopBarVisible] = useState(true)
   const [conversationSearchQuery, setConversationSearchQuery] = useState('')
   const [conversationActionsId, setConversationActionsId] = useState<string | null>(null)
   const [isScrolledToBottom, setIsScrolledToBottom] = useState(true)
-  const touchStartY = useRef(-1)
   const conversationLongPressTimer = useRef<number | null>(null)
   const autoScrollStateRef = useRef<{ conversationId: string | null; lastUserMessageSignature: string | null }>({ conversationId: null, lastUserMessageSignature: null })
   const isScrolledToBottomRef = useRef(true)
@@ -375,60 +363,6 @@ export default function AgentWorkspace() {
     container.scrollTo({ top: container.scrollHeight, behavior })
   }, [])
 
-  // 处理触摸开始事件，用于移动端下拉刷新
-  const handleTouchStart = (e: React.TouchEvent) => {
-    const touchY = e.touches[0]?.clientY ?? -1
-    // 如果当前不是智能助手模式，或者移动端头部已经可见，或者页面已经滚动，或者触摸位置在边缘保护区域内，则不处理下拉刷新
-    if (
-      appMode !== 'agent' ||
-      agentMobileHeaderVisible ||
-      (scrollContainerRef.current?.scrollTop ?? getPageScrollTop()) > 0 ||
-      touchY < MOBILE_HEADER_EDGE_GUARD
-    ) {
-      touchStartY.current = -1
-      setPullDownOffset(0)
-      return
-    }
-
-    touchStartY.current = touchY
-  }
-
-  // 处理触摸开始事件，用于移动端下拉刷新头部
-  const handleHeaderTouchStart = (e: React.TouchEvent) => {
-    touchStartY.current = e.touches[0].clientY
-  }
-   
-  // 处理触摸移动事件，用于移动端下拉刷新头部
-  const handleTouchMove = (e: React.TouchEvent) => {
-    if (touchStartY.current <= 0 || agentMobileHeaderVisible) return
-
-    const diff = e.touches[0].clientY - touchStartY.current
-    if (diff <= 0) {
-      setPullDownOffset(0)
-      return
-    }
-
-    if (e.cancelable) e.preventDefault()
-    if (diff >= MOBILE_HEADER_PULL_THRESHOLD) {
-      setAgentMobileHeaderVisible(true)
-      setPullDownOffset(0)
-      touchStartY.current = -1
-      return
-    }
-
-    setPullDownOffset(Math.min(diff, MOBILE_HEADER_PULL_MAX_OFFSET))
-  }
-
-  // 处理触摸结束事件，用于移动端下拉刷新头部
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    if (touchStartY.current > 0 && !agentMobileHeaderVisible) {
-      const touchEndY = e.changedTouches[0].clientY
-      if (touchEndY - touchStartY.current >= MOBILE_HEADER_PULL_THRESHOLD) setAgentMobileHeaderVisible(true)
-    }
-    setPullDownOffset(0)
-    touchStartY.current = -1
-  }
-
   // 当侧边栏折叠时，清除正在编辑的对话 ID
   useEffect(() => {
     if (sidebarCollapsed) {
@@ -441,28 +375,10 @@ export default function AgentWorkspace() {
     if (appMode !== 'agent') return
 
     document.documentElement.classList.add('agent-no-pull-refresh')
+    setAgentMobileHeaderVisible(true)
     window.scrollTo({ top: 0, behavior: 'auto' })
     return () => document.documentElement.classList.remove('agent-no-pull-refresh')
-  }, [appMode])
-
-  // 当移动端头部可见时，添加事件监听器以隐藏头部
-  useEffect(() => {
-    if (!agentMobileHeaderVisible || appMode !== 'agent') return
-
-    const handleInteract = (e: MouseEvent | TouchEvent) => {
-      const target = e.target as HTMLElement
-      if (target.closest('header[data-no-drag-select]')) return
-      setAgentMobileHeaderVisible(false)
-    }
-
-    document.addEventListener('mousedown', handleInteract, { capture: true })
-    document.addEventListener('touchstart', handleInteract, { capture: true })
-
-    return () => {
-      document.removeEventListener('mousedown', handleInteract, { capture: true })
-      document.removeEventListener('touchstart', handleInteract, { capture: true })
-    }
-  }, [agentMobileHeaderVisible, appMode, setAgentMobileHeaderVisible])
+  }, [appMode, setAgentMobileHeaderVisible])
 
   // 当应用模式为智能助手时，添加滚动和调整大小的事件监听器，以更新是否滚动到底部的状态，并根据滚动位置显示或隐藏移动端顶部栏
   useEffect(() => {
@@ -950,22 +866,10 @@ export default function AgentWorkspace() {
   return (
     <main 
       data-agent-workspace 
-      data-agent-mobile-header-visible={agentMobileHeaderVisible ? 'true' : undefined}
+      data-agent-mobile-header-visible="true"
       className="agent-workspace-shell safe-area-x mx-auto flex min-h-0 flex-col lg:flex-row max-w-7xl lg:gap-3 px-3 lg:px-0 relative transition-all duration-300"
       style={agentWorkspaceStyle}
     >
-      {/* Pull Down Indicator */}
-      {pullDownOffset > 0 && !agentMobileHeaderVisible && (
-        <div 
-          className="fixed top-0 left-0 right-0 z-50 flex justify-center items-end pointer-events-none sm:hidden"
-          style={{ height: `${pullDownOffset + 10}px`, opacity: pullDownOffset / MOBILE_HEADER_PULL_MAX_OFFSET }}
-        >
-          <div className="bg-black/60 backdrop-blur-sm text-white rounded-full p-1 mb-2 shadow-lg">
-            <ChevronDownIcon className="w-4 h-4" />
-          </div>
-        </div>
-      )}
-
       {/* Mobile Left Sidebar Overlay Backdrop */}
       {!sidebarCollapsed && (
         <div className="fixed inset-0 z-40 bg-black/50 lg:hidden" onClick={() => setSidebarCollapsed(true)} />
@@ -1065,12 +969,7 @@ export default function AgentWorkspace() {
       <section className="min-w-0 min-h-0 flex-1 flex flex-col relative">
         {/* Mobile Header Toggles */}
         <div className={`sticky top-0 z-20 lg:hidden overflow-hidden transition-all duration-300 ease-in-out ${mobileTopBarVisible ? 'max-h-16 opacity-100 mb-2' : 'max-h-0 opacity-0 mb-0 pointer-events-none'}`}>
-          <div
-            className="flex h-14 items-center justify-between border-b border-gray-200 bg-white/80 px-2 backdrop-blur dark:border-white/[0.08] dark:bg-gray-950/80"
-            onTouchStart={handleHeaderTouchStart}
-            onTouchMove={handleTouchMove}
-            onTouchEnd={handleTouchEnd}
-          >
+          <div className="flex h-14 items-center justify-between border-b border-gray-200 bg-white/80 px-2 backdrop-blur dark:border-white/[0.08] dark:bg-gray-950/80">
             <button type="button" onClick={() => setSidebarCollapsed(false)} className="p-2 text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-white/[0.04] rounded-lg transition-colors" title="展开对话列表">
               <SidebarLeftIcon className="w-5 h-5" />
             </button>
@@ -1142,9 +1041,6 @@ export default function AgentWorkspace() {
         <div 
           ref={scrollContainerRef}
           className="agent-message-scroll-viewport flex-1 space-y-4 px-1 pb-6 lg:pt-14 lg:px-4"
-          onTouchStart={handleTouchStart}
-          onTouchMove={handleTouchMove}
-          onTouchEnd={handleTouchEnd}
         >
           {!conversation ? (
             <div className="py-20 text-center text-gray-400">
