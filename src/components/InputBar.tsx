@@ -773,14 +773,12 @@ export default function InputBar() {
     const visualViewport = window.visualViewport
     window.addEventListener('resize', handleInputBarClearanceChange)
     visualViewport?.addEventListener('resize', handleInputBarClearanceChange)
-    visualViewport?.addEventListener('scroll', handleInputBarClearanceChange)
 
     return () => {
       cancelInputBarClearanceFrame()
       observer.disconnect()
       window.removeEventListener('resize', handleInputBarClearanceChange)
       visualViewport?.removeEventListener('resize', handleInputBarClearanceChange)
-      visualViewport?.removeEventListener('scroll', handleInputBarClearanceChange)
       document.documentElement.style.removeProperty('--input-bar-clearance')
     }
   }, [cancelInputBarClearanceFrame, updateInputBarClearance])

@@ -332,10 +332,10 @@ export default function AgentWorkspace() {
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const messageRefs = useRef(new Map<string, HTMLElement>())
   const [scrollTargetRoundId, setScrollTargetRoundId] = useState<string | null>(null)
-  const [mobileTopBarVisible, setMobileTopBarVisible] = useState(true)
   const [conversationSearchQuery, setConversationSearchQuery] = useState('')
   const [conversationActionsId, setConversationActionsId] = useState<string | null>(null)
   const [isScrolledToBottom, setIsScrolledToBottom] = useState(true)
+  const viewportChangeFrameRef = useRef<number | null>(null)
   const conversationLongPressTimer = useRef<number | null>(null)
   const autoScrollStateRef = useRef<{ conversationId: string | null; lastUserMessageSignature: string | null }>({ conversationId: null, lastUserMessageSignature: null })
   const isScrolledToBottomRef = useRef(true)
@@ -380,43 +380,32 @@ export default function AgentWorkspace() {
     return () => document.documentElement.classList.remove('agent-no-pull-refresh')
   }, [appMode, setAgentMobileHeaderVisible])
 
-  // 当应用模式为智能助手时，添加滚动和调整大小的事件监听器，以更新是否滚动到底部的状态，并根据滚动位置显示或隐藏移动端顶部栏
+  // 当应用模式为智能助手时，添加滚动和调整大小的事件监听器，以更新是否滚动到底部的状态
   useEffect(() => {
     if (appMode !== 'agent') return
 
     const container = scrollContainerRef.current
     if (!container) return
 
-    setMobileTopBarVisible(true)
-    let lastScrollY = container.scrollTop
     let ticking = false
 
     const handleScroll = () => {
       if (ticking) return
 
       window.requestAnimationFrame(() => {
-        const currentScrollY = container.scrollTop
-        if (currentScrollY < 20) {
-          setMobileTopBarVisible(true)
-        } else if (currentScrollY > lastScrollY + 10) {
-          setMobileTopBarVisible(false)
-        } else if (currentScrollY < lastScrollY - 10) {
-          setMobileTopBarVisible(true)
-        }
-
         updateIsScrolledToBottom()
-
-        lastScrollY = currentScrollY
         ticking = false
       })
       ticking = true
     }
 
     const handleViewportChange = () => {
+      if (viewportChangeFrameRef.current !== null) return
       const wasPinnedToBottom = isScrolledToBottomRef.current
-      updateIsScrolledToBottom()
-      if (!wasPinnedToBottom) return
-      window.requestAnimationFrame(() => {
+      viewportChangeFrameRef.current = window.requestAnimationFrame(() => {
+        viewportChangeFrameRef.current = null
+        updateIsScrolledToBottom()
+        if (!wasPinnedToBottom) return
         scrollToAgentBottom('auto')
         updateIsScrolledToBottom()
       })
@@ -433,16 +422,18 @@ export default function AgentWorkspace() {
     container.addEventListener('scroll', handleScroll, { passive: true })
     window.addEventListener('resize', handleViewportChange)
     visualViewport?.addEventListener('resize', handleViewportChange)
-    visualViewport?.addEventListener('scroll', handleViewportChange)
 
     // 清理事件监听器和取消动画帧
     return () => {
       window.cancelAnimationFrame(initialFrame)
+      if (viewportChangeFrameRef.current !== null) {
+        window.cancelAnimationFrame(viewportChangeFrameRef.current)
+        viewportChangeFrameRef.current = null
+      }
       resizeObserver.disconnect()
       container.removeEventListener('scroll', handleScroll)
       window.removeEventListener('resize', handleViewportChange)
       visualViewport?.removeEventListener('resize', handleViewportChange)
-      visualViewport?.removeEventListener('scroll', handleViewportChange)
     }
   }, [appMode, scrollToAgentBottom, updateIsScrolledToBottom])
 
@@ -968,22 +959,22 @@ export default function AgentWorkspace() {
       {/* Center Chat Area */}
       <section className="min-w-0 min-h-0 flex-1 flex flex-col relative">
         {/* Mobile Header Toggles */}
-        <div className={`sticky top-0 z-20 lg:hidden overflow-hidden transition-all duration-300 ease-in-out ${mobileTopBarVisible ? 'max-h-16 opacity-100 mb-2' : 'max-h-0 opacity-0 mb-0 pointer-events-none'}`}>
-          <div className="flex h-14 items-center justify-between border-b border-gray-200 bg-white/80 px-2 backdrop-blur dark:border-white/[0.08] dark:bg-gray-950/80">
-            <button type="button" onClick={() => setSidebarCollapsed(false)} className="p-2 text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-white/[0.04] rounded-lg transition-colors" title="展开对话列表">
+        <div className="sticky top-0 z-20 mb-2 lg:hidden">
+          <div className="flex h-14 items-center justify-between rounded-2xl border border-white/[0.45] bg-white/[0.28] px-2 shadow-[0_12px_36px_rgba(15,23,42,0.12)] ring-1 ring-white/20 backdrop-blur-2xl transition-colors dark:border-white/[0.12] dark:bg-white/[0.10] dark:shadow-[0_16px_44px_rgba(0,0,0,0.28)] dark:ring-white/[0.08]">
+            <button type="button" onClick={() => setSidebarCollapsed(false)} className="p-2 text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white hover:bg-white/[0.35] dark:hover:bg-white/[0.10] rounded-xl transition-colors" title="展开对话列表">
               <SidebarLeftIcon className="w-5 h-5" />
             </button>
             <button
               type="button"
               onClick={openMobileTitleEditor}
-              className="group flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded px-2 text-center text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/[0.04]"
+              className="group mx-1 flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-xl px-2 py-2 text-center text-sm font-semibold text-gray-800 transition-colors hover:bg-white/[0.35] dark:text-gray-100 dark:hover:bg-white/[0.10]"
               aria-haspopup="dialog"
               aria-expanded={mobileTitleEditorOpen}
             >
               <span className="min-w-0 truncate">{conversation?.title || 'Agent'}</span>
               <EditIcon className="h-3.5 w-3.5 shrink-0 text-gray-400 opacity-0 transition-opacity group-hover:opacity-100" />
             </button>
-            <button type="button" onClick={createConversation} className="p-2 text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-white/[0.04] rounded-lg transition-colors" title="新对话">
+            <button type="button" onClick={createConversation} className="p-2 text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white hover:bg-white/[0.35] dark:hover:bg-white/[0.10] rounded-xl transition-colors" title="新对话">
               <EditIcon className="w-5 h-5" />
             </button>
           </div>
