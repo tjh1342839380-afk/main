@@ -12,7 +12,7 @@ import { collectAgentRoundOutputImageSlots } from '../lib/agentImageReferences'
 import { useHintTooltip } from '../hooks/useHintTooltip'
 import { downloadImageEntriesAsZip, downloadImageIds, formatExportFileTime, getTaskOutputImageZipEntries } from '../lib/downloadImages'
 import SizePickerModal from './SizePickerModal'
-import { CloseIcon } from './icons'
+import { CloseIcon, MicrophoneIcon } from './icons'
 import ButtonTooltip from './input/buttonTooltip'
 import DragUploadOverlay from './input/dragUploadOverlay'
 import InputBatchBars from './input/inputBatchBars'
@@ -21,6 +21,55 @@ import InputParamsPanel from './input/inputParamsPanel'
 
 function getMentionTagTextLength(el: Element) {
   return el.textContent?.length ?? 0
+}
+
+type SpeechRecognitionConstructor = new () => SpeechRecognitionController
+
+interface SpeechRecognitionController {
+  lang: string
+  continuous: boolean
+  interimResults: boolean
+  maxAlternatives: number
+  onstart: (() => void) | null
+  onresult: ((event: SpeechRecognitionResultEventLike) => void) | null
+  onerror: ((event: SpeechRecognitionErrorEventLike) => void) | null
+  onend: (() => void) | null
+  start: () => void
+  stop: () => void
+  abort: () => void
+}
+
+interface SpeechRecognitionResultEventLike {
+  resultIndex: number
+  results: {
+    length: number
+    [index: number]: {
+      isFinal: boolean
+      length: number
+      [index: number]: { transcript: string }
+    }
+  }
+}
+
+interface SpeechRecognitionErrorEventLike {
+  error?: string
+}
+
+function getSpeechRecognitionConstructor(): SpeechRecognitionConstructor | null {
+  if (typeof window === 'undefined') return null
+  const speechWindow = window as Window & {
+    SpeechRecognition?: SpeechRecognitionConstructor
+    webkitSpeechRecognition?: SpeechRecognitionConstructor
+  }
+  return speechWindow.SpeechRecognition ?? speechWindow.webkitSpeechRecognition ?? null
+}
+
+function getSpeechErrorMessage(error?: string) {
+  if (error === 'not-allowed' || error === 'service-not-allowed') return '语音输入权限被拒绝，请在浏览器中允许麦克风'
+  if (error === 'audio-capture') return '没有找到可用麦克风'
+  if (error === 'network') return '语音识别网络异常，请稍后重试'
+  if (error === 'no-speech') return '没有识别到语音'
+  return '语音识别失败'
 }
 
 function getNodeVisibleTextLength(node: Node): number {
@@ -632,6 +681,9 @@ export default function InputBar() {
   const [isSingleLine, setIsSingleLine] = useState(true)
   const [submitHover, setSubmitHover] = useState(false)
   const [attachHover, setAttachHover] = useState(false)
+  const [speechHover, setSpeechHover] = useState(false)
+  const [speechStarting, setSpeechStarting] = useState(false)
+  const [speechListening, setSpeechListening] = useState(false)
   const [imageHintId, setImageHintId] = useState<string | null>(null)
   const [mobileCollapsed, setMobileCollapsed] = useState(false)
   const [showSizePicker, setShowSizePicker] = useState(false)
@@ -660,6 +712,8 @@ export default function InputBar() {
   const isUserInputRef = useRef(false)
   const imageHintLockedRef = useRef(false)
   const imageHintReleaseRef = useRef<(() => void) | null>(null)
+  const speechRecognitionRef = useRef<SpeechRecognitionController | null>(null)
+  const speechErrorShownRef = useRef(false)
   const [cursorPos, setCursorPos] = useState(0)
   const [menuLeft, setMenuLeft] = useState(0)
   const maskConflictNoticeShownRef = useRef(false)
@@ -807,12 +861,14 @@ export default function InputBar() {
   ), [activeProfile.id, settingsActiveProfile.id, settings])
   const hasSubmitApiConfig = Boolean(activeProfile.apiKey)
   const canSubmit = Boolean(prompt.trim() && hasSubmitApiConfig && !activeAgentIsRunning)
+  const submitIdleLabel = appMode === 'agent' ? '发送' : maskDraft ? '遮罩编辑' : '生成图像'
+  const submitRunningLabel = appMode === 'agent' ? '停止回复' : '停止生成'
   const submitButtonAriaLabel = activeAgentIsRunning
-    ? '停止生成'
+    ? submitRunningLabel
     : hasSubmitApiConfig
-    ? maskDraft ? '遮罩编辑' : '生成图像'
+    ? appMode === 'agent' ? '发送消息' : submitIdleLabel
     : '请先配置 API'
-  const submitTooltipText = activeAgentIsRunning ? '停止生成' : '尚未完成 API 配置，请在右上角设置中进行'
+  const submitTooltipText = activeAgentIsRunning ? submitRunningLabel : '尚未完成 API 配置，请在右上角设置中进行'
   const promptPlaceholder = ''
   const submitCurrentMode = useCallback(() => {
     if (appMode === 'agent') {
@@ -869,6 +925,14 @@ export default function InputBar() {
       ]
   const atImageLimit = inputImages.length >= API_MAX_IMAGES
   const uploadImageTooltipText = atImageLimit ? `参考图数量已达上限（${API_MAX_IMAGES} 张），无法继续添加` : '上传图片'
+  const speechRecognitionSupported = useMemo(() => Boolean(getSpeechRecognitionConstructor()), [])
+  const speechTooltipText = !speechRecognitionSupported
+    ? '当前浏览器不支持语音输入，可使用手机键盘语音按钮'
+    : speechListening
+    ? '停止语音输入'
+    : speechStarting
+    ? '正在启动语音输入'
+    : '语音输入'
   const transparentOutputHint = useHintTooltip()
   const handleTransparentOutputMenuOpenChange = useCallback((open: boolean) => {
     if (open) transparentOutputHint.hide()
@@ -988,6 +1052,98 @@ export default function InputBar() {
       }
     }, 0)
   }, [prompt, setPrompt, syncPromptFromContentEditable])
+  const insertPromptTextAtSelectionRef = useRef(insertPromptTextAtSelection)
+  insertPromptTextAtSelectionRef.current = insertPromptTextAtSelection
+
+  const stopSpeechInput = useCallback(() => {
+    const recognition = speechRecognitionRef.current
+    if (!recognition) {
+      setSpeechStarting(false)
+      setSpeechListening(false)
+      return
+    }
+    try {
+      recognition.stop()
+    } catch {
+      recognition.abort()
+    }
+    setSpeechStarting(false)
+    setSpeechListening(false)
+  }, [])
+
+  const toggleSpeechInput = useCallback(() => {
+    if (speechListening || speechStarting) {
+      stopSpeechInput()
+      return
+    }
+
+    const Recognition = getSpeechRecognitionConstructor()
+    if (!Recognition) {
+      showToast('当前浏览器不支持语音输入，可使用手机键盘语音按钮', 'info')
+      return
+    }
+    if (window.isSecureContext === false) {
+      showToast('语音输入需要 HTTPS，请使用正式域名访问', 'error')
+      return
+    }
+
+    const recognition = new Recognition()
+    speechRecognitionRef.current = recognition
+    speechErrorShownRef.current = false
+    let hasFinalText = false
+    recognition.lang = 'zh-CN'
+    recognition.continuous = true
+    recognition.interimResults = true
+    recognition.maxAlternatives = 1
+    recognition.onstart = () => {
+      setSpeechStarting(false)
+      setSpeechListening(true)
+      setInputBarExpanded(true)
+      textareaRef.current?.focus()
+    }
+    recognition.onresult = (event) => {
+      let text = ''
+      for (let idx = event.resultIndex; idx < event.results.length; idx++) {
+        const result = event.results[idx]
+        if (result?.isFinal) text += result[0]?.transcript ?? ''
+      }
+      const normalized = text.trim()
+      if (!normalized) return
+
+      hasFinalText = true
+      setAtImageMenuIndex(0)
+      setAtImageMenuDismissed(false)
+      insertPromptTextAtSelectionRef.current(normalized)
+    }
+    recognition.onerror = (event) => {
+      if (event.error === 'aborted') return
+      speechErrorShownRef.current = true
+      showToast(getSpeechErrorMessage(event.error), event.error === 'no-speech' ? 'info' : 'error')
+    }
+    recognition.onend = () => {
+      speechRecognitionRef.current = null
+      setSpeechStarting(false)
+      setSpeechListening(false)
+      if (!hasFinalText && !speechErrorShownRef.current) {
+        showToast('语音输入已结束', 'info')
+      }
+    }
+
+    try {
+      setSpeechStarting(true)
+      recognition.start()
+    } catch (err) {
+      speechRecognitionRef.current = null
+      setSpeechStarting(false)
+      setSpeechListening(false)
+      showToast(`语音输入启动失败：${err instanceof Error ? err.message : String(err)}`, 'error')
+    }
+  }, [showToast, speechListening, speechStarting, stopSpeechInput])
+
+  useEffect(() => () => {
+    speechRecognitionRef.current?.abort()
+    speechRecognitionRef.current = null
+  }, [])
 
   const handleClearPrompt = useCallback(() => {
     isUserInputRef.current = false
@@ -2235,6 +2391,29 @@ export default function InputBar() {
                 </div>
                 <div
                   className="relative"
+                  onMouseEnter={() => setSpeechHover(true)}
+                  onMouseLeave={() => setSpeechHover(false)}
+                >
+                  <ButtonTooltip visible={speechHover} text={speechTooltipText} />
+                  <button
+                    onClick={toggleSpeechInput}
+                    className={`p-2.5 rounded-xl transition-all shadow-sm ${
+                      speechListening
+                        ? 'bg-blue-500 text-white shadow-blue-500/30 animate-pulse'
+                        : speechStarting
+                        ? 'bg-blue-100 text-blue-600 dark:bg-blue-500/15 dark:text-blue-300'
+                        : speechRecognitionSupported
+                        ? 'bg-gray-200 dark:bg-white/[0.06] hover:bg-gray-300 dark:hover:bg-white/[0.1] text-gray-500 dark:text-gray-300 hover:shadow'
+                        : 'bg-gray-200 dark:bg-white/[0.04] text-gray-300 dark:text-gray-500 cursor-not-allowed'
+                    }`}
+                    aria-label={speechTooltipText}
+                    aria-pressed={speechListening}
+                  >
+                    <MicrophoneIcon className="w-5 h-5" />
+                  </button>
+                </div>
+                <div
+                  className="relative"
                   onMouseEnter={() => setSubmitHover(true)}
                   onMouseLeave={() => setSubmitHover(false)}
                 >
@@ -2341,6 +2520,29 @@ export default function InputBar() {
                   )}
                 </div>
                 <div
+                  className="relative"
+                  onMouseEnter={() => setSpeechHover(true)}
+                  onMouseLeave={() => setSpeechHover(false)}
+                >
+                  <ButtonTooltip visible={speechHover} text={speechTooltipText} />
+                  <button
+                    onClick={toggleSpeechInput}
+                    className={`p-2.5 rounded-xl transition-all shadow-sm flex-shrink-0 ${
+                      speechListening
+                        ? 'bg-blue-500 text-white shadow-blue-500/30 animate-pulse'
+                        : speechStarting
+                        ? 'bg-blue-100 text-blue-600 dark:bg-blue-500/15 dark:text-blue-300'
+                        : speechRecognitionSupported
+                        ? 'bg-gray-200 dark:bg-white/[0.06] hover:bg-gray-300 dark:hover:bg-white/[0.1] text-gray-500 dark:text-gray-300'
+                        : 'bg-gray-200 dark:bg-white/[0.04] text-gray-300 dark:text-gray-500 cursor-not-allowed'
+                    }`}
+                    aria-label={speechTooltipText}
+                    aria-pressed={speechListening}
+                  >
+                    <MicrophoneIcon className="w-5 h-5" />
+                  </button>
+                </div>
+                <div
                   className="relative flex-1"
                   onMouseEnter={() => setSubmitHover(true)}
                   onMouseLeave={() => setSubmitHover(false)}
@@ -2367,7 +2569,7 @@ export default function InputBar() {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
                       </svg>
                     )}
-                    {activeAgentIsRunning ? '停止生成' : maskDraft ? '遮罩编辑' : '生成图像'}
+                    {activeAgentIsRunning ? submitRunningLabel : submitIdleLabel}
                   </button>
                 </div>
               </div>

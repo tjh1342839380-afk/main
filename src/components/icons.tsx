@@ -24,6 +24,17 @@ export function PlusIcon(props: SVGProps<SVGSVGElement>) {
   )
 }
 
+export function MicrophoneIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" {...props}>
+      <path strokeWidth={2} d="M12 3a3 3 0 0 0-3 3v5a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z" />
+      <path strokeWidth={2} d="M5 10v1a7 7 0 0 0 14 0v-1" />
+      <path strokeWidth={2} d="M12 18v3" />
+      <path strokeWidth={2} d="M8 21h8" />
+    </svg>
+  )
+}
+
 export function CloseIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" {...props}>
