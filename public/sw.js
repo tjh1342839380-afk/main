@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gpt-image-2-for-tjh-v0.6.10-background-manifest-20260703'
+const CACHE_NAME = 'gpt-image-2-for-tjh-v0.6.10-asset-mime-20260703'
 const APP_SHELL = ['./', './index.html', './manifest.webmanifest', './brand/gpt-img-2-for-tjh-icon.png']
 
 function isCacheableResponse(url, response) {
