@@ -239,9 +239,36 @@ body {
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
+  scrollbar-color: transparent transparent;
   -webkit-overflow-scrolling: touch;
   transform: translateZ(0);
   contain: layout paint;
+}
+
+.agent-message-scroll-viewport[data-scrollbar-visible="true"] {
+  scrollbar-color: rgba(255, 255, 255, 0.72) transparent;
+}
+
+.agent-message-scroll-viewport::-webkit-scrollbar {
+  width: 8px;
+}
+
+.agent-message-scroll-viewport::-webkit-scrollbar-thumb {
+  border-radius: 9999px;
+  background-color: transparent;
+  transition: background-color 180ms ease;
+}
+
+.agent-message-scroll-viewport[data-scrollbar-visible="true"]::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.72);
+}
+
+.agent-message-scroll-viewport[data-scrollbar-visible="true"]::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(255, 255, 255, 0.88);
+}
+
+.agent-message-scroll-viewport::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 .agent-mobile-title-glass {

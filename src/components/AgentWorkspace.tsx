@@ -336,6 +336,7 @@ export default function AgentWorkspace() {
   const [conversationActionsId, setConversationActionsId] = useState<string | null>(null)
   const [isScrolledToBottom, setIsScrolledToBottom] = useState(true)
   const viewportChangeFrameRef = useRef<number | null>(null)
+  const scrollbarHideTimerRef = useRef<number | null>(null)
   const conversationLongPressTimer = useRef<number | null>(null)
   const autoScrollStateRef = useRef<{ conversationId: string | null; lastUserMessageSignature: string | null }>({ conversationId: null, lastUserMessageSignature: null })
   const isScrolledToBottomRef = useRef(true)
@@ -361,6 +362,21 @@ export default function AgentWorkspace() {
     const container = scrollContainerRef.current
     if (!container) return
     container.scrollTo({ top: container.scrollHeight, behavior })
+  }, [])
+
+  // Agent 对话区默认隐藏滚动条，用户滚动时短暂显示。
+  const showAgentScrollbar = useCallback(() => {
+    const container = scrollContainerRef.current
+    if (!container) return
+
+    container.dataset.scrollbarVisible = 'true'
+    if (scrollbarHideTimerRef.current !== null) {
+      window.clearTimeout(scrollbarHideTimerRef.current)
+    }
+    scrollbarHideTimerRef.current = window.setTimeout(() => {
+      delete container.dataset.scrollbarVisible
+      scrollbarHideTimerRef.current = null
+    }, 900)
   }, [])
 
   // 当侧边栏折叠时，清除正在编辑的对话 ID
@@ -390,6 +406,7 @@ export default function AgentWorkspace() {
     let ticking = false
 
     const handleScroll = () => {
+      showAgentScrollbar()
       if (ticking) return
 
       window.requestAnimationFrame(() => {
@@ -430,12 +447,17 @@ export default function AgentWorkspace() {
         window.cancelAnimationFrame(viewportChangeFrameRef.current)
         viewportChangeFrameRef.current = null
       }
+      if (scrollbarHideTimerRef.current !== null) {
+        window.clearTimeout(scrollbarHideTimerRef.current)
+        scrollbarHideTimerRef.current = null
+      }
+      delete container.dataset.scrollbarVisible
       resizeObserver.disconnect()
       container.removeEventListener('scroll', handleScroll)
       window.removeEventListener('resize', handleViewportChange)
       visualViewport?.removeEventListener('resize', handleViewportChange)
     }
-  }, [appMode, scrollToAgentBottom, updateIsScrolledToBottom])
+  }, [appMode, scrollToAgentBottom, showAgentScrollbar, updateIsScrolledToBottom])
 
   // 当应用模式为智能助手时，确保至少有一个对话存在，如果没有则创建一个新的对话
   useEffect(() => {
