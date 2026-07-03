@@ -1,6 +1,6 @@
 import { useRef, useEffect, useCallback, useState, useMemo, useLayoutEffect } from 'react'
 import { createPortal } from 'react-dom'
-import { ALL_FAVORITES_COLLECTION_ID, deleteFavoriteCollection, getTaskFavoriteCollectionIds, useStore, submitTask, submitAgentMessage, stopAgentResponse, addImageFromFile, createInputImageFromFile, deleteImageIfUnreferenced, removeMultipleTasks, getCachedImage, ensureImageCached, getActiveAgentRounds, taskMatchesFavoriteScope, taskMatchesFilterStatus, taskMatchesSearchQuery } from '../store'
+import { ALL_FAVORITES_COLLECTION_ID, deleteFavoriteCollection, getTaskFavoriteCollectionIds, useStore, submitTask, submitAgentMessage, stopAgentResponse, addImageFromFile, createInputImageFromFile, deleteImageIfUnreferenced, removeMultipleTasks, referenceTaskOutputs, getCachedImage, ensureImageCached, getActiveAgentRounds, taskMatchesFavoriteScope, taskMatchesFilterStatus, taskMatchesSearchQuery } from '../store'
 import { DEFAULT_PARAMS, type TaskRecord } from '../types'
 import { getActiveApiProfile, getAgentImageApiProfile, normalizeSettings } from '../lib/apiProfiles'
 import { DEFAULT_FAL_IMAGE_SIZE, getChangedParams, getOutputImageLimitForSettings, normalizeParamsForSettings } from '../lib/paramCompatibility'
@@ -777,6 +777,13 @@ export default function InputBar() {
     document.addEventListener('pointerdown', handlePointerDown)
     return () => document.removeEventListener('pointerdown', handlePointerDown)
   }, [])
+
+  const handleReferenceSelected = useCallback(async () => {
+    const added = await referenceTaskOutputs(selectedTaskIds)
+    if (added <= 0) return
+    clearSelection()
+    setInputBarExpanded(true)
+  }, [clearSelection, selectedTaskIds])
 
   const settingsActiveProfile = useMemo(() => getActiveApiProfile(settings), [settings])
   const currentActiveProfile = useMemo(() => (
@@ -2056,6 +2063,7 @@ export default function InputBar() {
           onSelectAllVisibleTasks={handleSelectAllVisibleTasks}
           onInvertVisibleTasks={handleInvertVisibleTasks}
           onToggleFavorite={handleToggleFavorite}
+          onReferenceSelected={handleReferenceSelected}
           onDownloadSelected={handleDownloadSelected}
           onDeleteSelected={handleDeleteSelected}
         />

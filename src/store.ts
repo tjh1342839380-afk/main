@@ -92,6 +92,7 @@ const MAX_THUMBNAIL_BACKFILL_CONCURRENT = 4
 const FAL_RECOVERY_POLL_MS = 10_000
 const CUSTOM_RECOVERY_POLL_MS = 10_000
 const SUPPORT_PROMPT_IMAGE_THRESHOLD = 50
+const MAX_INPUT_IMAGES = 16
 const AGENT_INPUT_DRAFT_RETENTION_MS = 3 * 24 * 60 * 60 * 1000
 const AGENT_ROUND_IMAGE_MENTION_RE = /@(?:第)?(\d+)轮图(\d+)/g
 const falRecoveryTimers = new Map<string, ReturnType<typeof setTimeout>>()
@@ -4834,21 +4835,119 @@ export async function reuseConfig(task: TaskRecord) {
   )
 }
 
-/** 编辑输出：将输出图加入输入 */
-export async function editOutputs(task: TaskRecord) {
-  const { inputImages, addInputImage, showToast } = useStore.getState()
-  if (!task.outputImages?.length) return
+async function addOutputImagesToInput(imageIds: string[]) {
+  const state = useStore.getState()
+  const uniqueImageIds = imageIds.filter((imgId, idx, list) => imgId && list.indexOf(imgId) === idx)
+  const existingIds = new Set(state.inputImages.map((img) => img.id))
+  const pendingImageIds = uniqueImageIds.filter((imgId) => !existingIds.has(imgId))
+  const remaining = Math.max(0, MAX_INPUT_IMAGES - state.inputImages.length)
+  const limitedImageIds = pendingImageIds.slice(0, remaining)
+  let skippedByLimit = Math.max(0, pendingImageIds.length - limitedImageIds.length)
+  let missing = 0
+  const imgs: InputImage[] = []
 
-  let added = 0
-  for (const imgId of task.outputImages) {
-    if (inputImages.find((i) => i.id === imgId)) continue
+  for (const imgId of limitedImageIds) {
     const dataUrl = await ensureImageCached(imgId)
     if (dataUrl) {
-      addInputImage({ id: imgId, dataUrl })
-      added++
+      imgs.push({ id: imgId, dataUrl })
+    } else {
+      missing++
     }
   }
-  showToast(`已添加 ${added} 张输出图到输入`, 'success')
+
+  if (!imgs.length) {
+    return {
+      added: 0,
+      wanted: uniqueImageIds.length,
+      alreadyInInput: uniqueImageIds.length - pendingImageIds.length,
+      skippedByLimit,
+      missing,
+    }
+  }
+
+  const latest = useStore.getState()
+  const latestIds = new Set(latest.inputImages.map((img) => img.id))
+  const nextImages = [...latest.inputImages]
+  for (const img of imgs) {
+    if (nextImages.length >= MAX_INPUT_IMAGES) {
+      skippedByLimit++
+      continue
+    }
+    if (latestIds.has(img.id)) continue
+    latestIds.add(img.id)
+    nextImages.push(img)
+  }
+
+  const added = nextImages.length - latest.inputImages.length
+  if (added > 0) latest.setInputImages(nextImages)
+
+  return {
+    added,
+    wanted: uniqueImageIds.length,
+    alreadyInInput: uniqueImageIds.length - pendingImageIds.length,
+    skippedByLimit,
+    missing,
+  }
+}
+
+/** 编辑输出：将输出图加入输入 */
+export async function editOutputs(task: TaskRecord) {
+  const { showToast } = useStore.getState()
+  if (!task.outputImages?.length) return
+
+  const result = await addOutputImagesToInput(task.outputImages)
+  if (result.added > 0) {
+    showToast(
+      result.skippedByLimit > 0
+        ? `已添加 ${result.added} 张输出图到输入，参考图已达上限 ${MAX_INPUT_IMAGES} 张`
+        : `已添加 ${result.added} 张输出图到输入`,
+      result.skippedByLimit > 0 ? 'info' : 'success',
+    )
+    return
+  }
+  if (result.alreadyInInput === result.wanted) {
+    showToast('输出图已在参考图中', 'info')
+    return
+  }
+  if (result.skippedByLimit > 0) {
+    showToast(`参考图数量已达上限（${MAX_INPUT_IMAGES} 张），无法继续添加`, 'error')
+    return
+  }
+  showToast('输出图已丢失，无法加入参考图', 'error')
+}
+
+/** 批量引用输出图到输入 */
+export async function referenceTaskOutputs(taskIds: string[]) {
+  const { tasks, showToast } = useStore.getState()
+  if (!taskIds.length) return 0
+
+  const taskMap = new Map(tasks.map((task) => [task.id, task]))
+  const imageIds = taskIds.flatMap((id) => taskMap.get(id)?.outputImages ?? [])
+  if (!imageIds.length) {
+    showToast('选中的任务没有可引用的图片', 'info')
+    return 0
+  }
+
+  const result = await addOutputImagesToInput(imageIds)
+  if (result.added > 0) {
+    showToast(
+      result.skippedByLimit > 0
+        ? `已引用 ${result.added} 张图片，参考图已达上限 ${MAX_INPUT_IMAGES} 张`
+        : `已引用 ${result.added} 张图片到输入`,
+      result.skippedByLimit > 0 ? 'info' : 'success',
+    )
+    return result.added
+  }
+  if (result.alreadyInInput === result.wanted) {
+    showToast('选中的图片已在参考图中', 'info')
+    return 0
+  }
+  if (result.skippedByLimit > 0) {
+    showToast(`参考图数量已达上限（${MAX_INPUT_IMAGES} 张），无法继续添加`, 'error')
+    return 0
+  }
+  showToast('引用失败：图片资源不存在', 'error')
+  return 0
 }
 
 /** 删除多条任务 */
