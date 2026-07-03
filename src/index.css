@@ -244,6 +244,16 @@ body {
   contain: layout paint;
 }
 
+.agent-mobile-title-glass {
+  border-color: rgba(255, 255, 255, 0.45);
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.dark .agent-mobile-title-glass {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.1);
+}
+
 @media (max-width: 639px) {
   .agent-workspace-shell[data-agent-mobile-header-visible="true"] {
     --agent-message-top-offset: calc(var(--safe-area-top, 0px) + 7rem);

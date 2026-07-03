@@ -960,7 +960,7 @@ export default function AgentWorkspace() {
       <section className="min-w-0 min-h-0 flex-1 flex flex-col relative">
         {/* Mobile Header Toggles */}
         <div className="sticky top-0 z-20 mb-2 lg:hidden">
-          <div className="flex h-14 items-center justify-between rounded-2xl border border-white/[0.45] bg-white/[0.28] px-2 shadow-[0_12px_36px_rgba(15,23,42,0.12)] ring-1 ring-white/20 backdrop-blur-2xl transition-colors dark:border-white/[0.12] dark:bg-white/[0.10] dark:shadow-[0_16px_44px_rgba(0,0,0,0.28)] dark:ring-white/[0.08]">
+          <div className="agent-mobile-title-glass flex h-14 items-center justify-between rounded-2xl border px-2 shadow-[0_12px_36px_rgba(15,23,42,0.12)] ring-1 ring-white/20 backdrop-blur-2xl transition-colors dark:shadow-[0_16px_44px_rgba(0,0,0,0.28)] dark:ring-white/[0.08]">
             <button type="button" onClick={() => setSidebarCollapsed(false)} className="p-2 text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white hover:bg-white/[0.35] dark:hover:bg-white/[0.10] rounded-xl transition-colors" title="展开对话列表">
               <SidebarLeftIcon className="w-5 h-5" />
             </button>
