@@ -19,6 +19,7 @@ import Toast from './components/Toast'
 import MaskEditorModal from './components/MaskEditorModal'
 import ImageContextMenu from './components/ImageContextMenu'
 import SupportPromptModal from './components/SupportPromptModal'
+import LandingAuthModal, { type LandingAuthMode } from './components/LandingAuthModal'
 import { FavoriteCollectionPickerModal, FavoriteCollectionsView, ManageCollectionsModal } from './components/FavoriteCollections'
 import { useGlobalClickSuppression } from './lib/clickSuppression'
 
@@ -74,11 +75,12 @@ export default function App() {
   const activeFavoriteCollectionId = useStore((s) => s.activeFavoriteCollectionId)
   const [dynamicBackgroundEnabled, setDynamicBackgroundEnabled] = useState(getInitialDynamicBackgroundEnabled)
   const [hasEnteredExperience, setHasEnteredExperience] = useState(false)
+  const [landingAuthMode, setLandingAuthMode] = useState<LandingAuthMode | null>(null)
   const [staticBackgroundManualOffset, setStaticBackgroundManualOffset] = useState(0)
   const [staticBackgroundImages, setStaticBackgroundImages] = useState<string[]>([DEFAULT_STATIC_BACKGROUND_URL])
   const dynamicBackgroundVideoRef = useRef<HTMLVideoElement>(null)
   const staticBackgroundUrl = staticBackgroundImages[staticBackgroundManualOffset % staticBackgroundImages.length] ?? DEFAULT_STATIC_BACKGROUND_URL
-  const showDynamicBackground = !hasEnteredExperience || dynamicBackgroundEnabled
+  const showDynamicBackground = hasEnteredExperience && dynamicBackgroundEnabled
   useDockerApiUrlMigrationNotice()
   useGlobalClickSuppression()
 
@@ -204,7 +206,7 @@ export default function App() {
   return (
     <>
       <div
-        className="fixed inset-0 z-0 pointer-events-none bg-[#111827] bg-cover bg-center bg-no-repeat"
+        className={`fixed inset-0 z-0 pointer-events-none bg-cover bg-center bg-no-repeat ${hasEnteredExperience ? 'bg-[#111827]' : 'landing-start-background'}`}
         style={hasEnteredExperience ? { backgroundImage: `url(${JSON.stringify(staticBackgroundUrl)})` } : undefined}
       >
         {showDynamicBackground && (
@@ -228,17 +230,64 @@ export default function App() {
       </div>
       <div className="relative z-10 min-h-screen">
         {!hasEnteredExperience ? (
-          <main className="landing-start-screen safe-area-x flex min-h-screen items-center justify-center text-center">
-            <div className="landing-start-content">
-              <h1>想象，即刻成画</h1>
-              <button
-                type="button"
-                className="landing-start-button"
-                onClick={() => setHasEnteredExperience(true)}
-              >
-                开始使用
-              </button>
+          <main className="landing-start-screen">
+            <div className="landing-start-frame">
+              <div className="landing-start-content">
+                <h1>想象，即刻成画</h1>
+                <p>用自然语言描述你的想法，AI 为你生成高质量图像</p>
+                <button
+                  type="button"
+                  className="landing-start-button"
+                  onClick={() => setHasEnteredExperience(true)}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+                    <path d="M12 3l1.7 4.6L18 9.3l-4.3 1.7L12 16l-1.7-5L6 9.3l4.3-1.7L12 3z" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                    <path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8L19 15z" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                  开始使用
+                </button>
+                <div className="landing-start-auth-actions">
+                  <button type="button" onClick={() => setLandingAuthMode('login')}>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+                      <circle cx="12" cy="8" r="4" strokeWidth="2" />
+                      <path d="M5 21a7 7 0 0114 0" strokeWidth="2" strokeLinecap="round" />
+                    </svg>
+                    登录
+                  </button>
+                  <span />
+                  <button type="button" onClick={() => setLandingAuthMode('register')}>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+                      <circle cx="10" cy="8" r="4" strokeWidth="2" />
+                      <path d="M3 21a7 7 0 0114 0" strokeWidth="2" strokeLinecap="round" />
+                      <path d="M19 8v6m3-3h-6" strokeWidth="2" strokeLinecap="round" />
+                    </svg>
+                    注册
+                  </button>
+                </div>
+              </div>
+
+              <div className="landing-start-notes">
+                <span>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+                    <path d="M7 18h10a4 4 0 00.6-8 6 6 0 00-11.2-1.8A4.8 4.8 0 007 18z" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                  登录后同步云端 API 配置
+                </span>
+                <i />
+                <span>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+                    <path d="M12 3l7 3v5c0 4.5-2.8 8.4-7 10-4.2-1.6-7-5.5-7-10V6l7-3z" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    <path d="M9 12l2 2 4-4" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                  API Key 加密保存
+                </span>
+              </div>
             </div>
+            <LandingAuthModal
+              mode={landingAuthMode}
+              onModeChange={setLandingAuthMode}
+              onClose={() => setLandingAuthMode(null)}
+            />
           </main>
         ) : (
           <>

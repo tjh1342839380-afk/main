@@ -358,16 +358,16 @@ export default function TaskCard({
 
       <div
         ref={cardRef}
-        className={`group relative h-[var(--task-card-height,156px)] bg-white dark:bg-gray-900 rounded-xl border overflow-hidden cursor-pointer touch-pan-y will-change-transform duration-200 hover:shadow-lg dark:hover:bg-gray-800/80 ${
-          isSwiping ? '!bg-white dark:!bg-gray-900' : ''
+        className={`task-card-glass group relative h-[var(--task-card-height,156px)] bg-white/20 dark:bg-gray-900/40 rounded-xl overflow-hidden cursor-pointer touch-pan-y will-change-transform duration-200 backdrop-blur-xl dark:hover:bg-gray-800/55 ${
+          isSwiping ? '!bg-white/25 dark:!bg-gray-900/55' : ''
         } ${
-          !isSwiping ? 'transition-[height,box-shadow,border-color,background-color,transform]' : 'transition-[height,box-shadow,border-color,background-color]'
+          !isSwiping ? 'transition-[height,box-shadow,background-color,transform]' : 'transition-[height,box-shadow,background-color]'
         } ${
           task.status === 'running'
-            ? 'border-blue-400 generating'
+            ? 'is-generating'
             : isSelected
-            ? 'border-blue-500 shadow-md ring-2 ring-blue-500/50'
-            : 'border-gray-200 dark:border-white/[0.08] hover:border-gray-300 dark:hover:border-white/[0.18]'
+            ? 'is-selected'
+            : ''
         }`}
         onClick={(e) => {
           if (Date.now() < suppressClickUntilRef.current) {
@@ -527,7 +527,7 @@ export default function TaskCard({
           {/* 运行中显示耗时，完成后显示封面图比例与分辨率标签 */}
           <div className="absolute top-1.5 left-1.5 flex items-center gap-1">
             {showRunningTimer || task.status !== 'done' || !coverRatio || !coverSize ? (
-              <span className="flex items-center gap-1 bg-black/50 text-white text-[10px] sm:text-xs px-1.5 py-0.5 rounded backdrop-blur-sm font-mono">
+              <span className="task-card-meta-badge flex items-center gap-1 text-[10px] sm:text-xs px-1.5 py-0.5 rounded font-mono">
                 <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
@@ -535,10 +535,10 @@ export default function TaskCard({
               </span>
             ) : (
               <>
-                <span className="bg-black/50 text-white text-[10px] sm:text-xs px-1.5 py-0.5 rounded backdrop-blur-sm font-mono">
+                <span className="task-card-meta-badge text-[10px] sm:text-xs px-1.5 py-0.5 rounded font-mono">
                   {coverRatio}
                 </span>
-                <span className="bg-black/50 text-white/90 text-[10px] sm:text-xs px-1.5 py-0.5 rounded backdrop-blur-sm font-medium">
+                <span className="task-card-meta-badge text-[10px] sm:text-xs px-1.5 py-0.5 rounded font-medium">
                   {coverSize}
                 </span>
               </>

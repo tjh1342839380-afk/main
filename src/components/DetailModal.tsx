@@ -493,7 +493,7 @@ export default function DetailModal() {
         {/* 左侧：图片 */}
         <div className="liquid-glass-detail-image-panel md:w-1/2 w-full h-64 md:h-auto relative flex items-center justify-center flex-shrink-0 min-h-[16rem]">
           {task.status === 'done' && outputLen > 0 && (currentOutputImageId || task.outputImages.length > 0) && (
-            <div className="absolute right-3 top-[15px] z-20 flex items-center gap-1.5">
+            <div className="hidden">
               {currentOutputImageId && (
                 <div className="relative group flex">
                   <button
@@ -562,16 +562,16 @@ export default function DetailModal() {
               <div data-selectable-text className="absolute left-4 top-[15px] flex items-center gap-1.5">
                 {currentImageRatio && currentImageSize ? (
                   <>
-                    <span className="bg-black/50 text-white text-xs px-2 py-0.5 rounded backdrop-blur-sm font-mono">
+                    <span className="task-card-meta-badge text-xs px-2 py-0.5 rounded font-mono">
                       {currentImageRatio}
                     </span>
-                    <span className="bg-black/50 text-white/90 text-xs px-2 py-0.5 rounded backdrop-blur-sm font-medium">
+                    <span className="task-card-meta-badge text-xs px-2 py-0.5 rounded font-medium">
                       {currentImageSize}
                     </span>
                   </>
                 ) : (
                   formatDuration() && (
-                    <span className="flex items-center gap-1 bg-black/50 text-white text-xs px-2 py-0.5 rounded backdrop-blur-sm font-mono">
+                    <span className="task-card-meta-badge flex items-center gap-1 text-xs px-2 py-0.5 rounded font-mono">
                       <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
@@ -674,7 +674,7 @@ export default function DetailModal() {
           )}
           {(task.status === 'running' || isFalReconnecting) && (
             <>
-              <div className="absolute left-4 top-4 flex items-center gap-1 bg-black/50 text-white text-xs px-2 py-0.5 rounded backdrop-blur-sm font-mono">
+              <div className="task-card-meta-badge absolute left-4 top-4 flex items-center gap-1 text-xs px-2 py-0.5 rounded font-mono">
                 <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
@@ -871,7 +871,7 @@ export default function DetailModal() {
         <div className="liquid-glass-detail-panel md:w-1/2 w-full p-5 pr-14 md:pr-14 overflow-y-auto overscroll-contain flex flex-col">
           <div data-selectable-text className="flex-1">
             <div className="flex items-center gap-1.5 mb-2">
-              <h3 className="text-xs font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+              <h3 className="detail-section-heading">
                 输入内容
               </h3>
               {task.prompt && !showPendingPrompt && (
@@ -927,7 +927,7 @@ export default function DetailModal() {
             {showReferenceSection && (
               <div className="mb-4">
                 <div className="flex items-center gap-1.5 mb-2">
-                  <h3 className="text-xs font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+                  <h3 className="detail-section-heading">
                     参考图
                   </h3>
                   {allInputImageIds.length > 0 && (
@@ -987,7 +987,7 @@ export default function DetailModal() {
             )}
 
             {/* 参数 */}
-            <h3 className="text-xs font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">
+            <h3 className="detail-section-heading mb-2">
               参数配置
             </h3>
             {showSourceInfo && (
@@ -1063,9 +1063,14 @@ export default function DetailModal() {
             </div>
 
             {/* 时间 */}
-            <div className="text-xs text-gray-400 dark:text-gray-500 mb-4">
-              <span>创建于 {formatTime(task.createdAt)}</span>
-              {formatDuration() && <span> · 耗时 {formatDuration()}</span>}
+            <div className="mb-4">
+              <span className="detail-section-heading">
+                创建时间
+              </span>
+              <div className="detail-created-time-value mt-2 text-xs">
+                <span>创建于 {formatTime(task.createdAt)}</span>
+                {formatDuration() && <span> · 耗时 {formatDuration()}</span>}
+              </div>
             </div>
           </div>
 
