@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import type { AppSettings, StoredImage, StoredImageThumbnail, TaskParams, TaskRecord } from '../types'
+import type { AppSettings, StoredAgentReferenceFile, StoredImage, StoredImageThumbnail, TaskParams, TaskRecord } from '../types'
 import { buildExportZip, readExportZip, readExportZipFileAsDataUrl } from './exportZip'
 
 describe('exportZip', () => {
@@ -38,6 +38,14 @@ describe('exportZip', () => {
       height: 24,
       thumbnailVersion: 2,
     }
+    const agentFile: StoredAgentReferenceFile = {
+      id: 'agent-file-1',
+      name: '品牌参考.pptx',
+      mimeType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+      size: 4,
+      dataUrl: 'data:application/vnd.openxmlformats-officedocument.presentationml.presentation;base64,UEsDBA==',
+      createdAt: 1700000000300,
+    }
 
     const { manifest, bytes } = buildExportZip({
       options: { exportConfig: true, exportTasks: true },
@@ -48,12 +56,34 @@ describe('exportZip', () => {
       thumbnailsByImageId: new Map([[thumbnail.id, thumbnail]]),
       favoriteCollections: [],
       defaultFavoriteCollectionId: null,
-      agentConversations: [],
+      agentConversations: [{
+        id: 'conversation-1',
+        title: '演示文稿',
+        activeRoundId: 'round-1',
+        createdAt: 1700000000000,
+        updatedAt: 1700000000300,
+        rounds: [{
+          id: 'round-1',
+          index: 1,
+          parentRoundId: null,
+          userMessageId: 'message-1',
+          prompt: '生成 PPT',
+          inputImageIds: [],
+          inputFiles: [{ id: agentFile.id, name: agentFile.name, mimeType: agentFile.mimeType, size: agentFile.size }],
+          outputTaskIds: [],
+          status: 'done',
+          error: null,
+          createdAt: 1700000000000,
+          finishedAt: 1700000000300,
+        }],
+        messages: [{ id: 'message-1', role: 'user', content: '生成 PPT', roundId: 'round-1', createdAt: 1700000000000 }],
+      }],
+      agentFiles: [agentFile],
     })
     const parsed = readExportZip(bytes)
 
     expect(parsed.manifest).toEqual(manifest)
-    expect(parsed.manifest.version).toBe(3)
+    expect(parsed.manifest.version).toBe(4)
     expect(parsed.manifest.exportedAt).toBe(new Date(1700000001000).toISOString())
     expect(parsed.manifest.imageFiles?.['img-1']).toEqual({
       path: 'images/task-task-1-input.png',
@@ -74,5 +104,11 @@ describe('exportZip', () => {
     expect(readExportZipFileAsDataUrl(parsed.files, 'images/task-task-1.png')).toBe(images[1].dataUrl)
     expect(readExportZipFileAsDataUrl(parsed.files, 'images/task-task-1-partial.png')).toBe(images[2].dataUrl)
     expect(readExportZipFileAsDataUrl(parsed.files, 'thumbnails/task-task-1-input.jpeg')).toBe(thumbnail.thumbnailDataUrl)
+    expect(parsed.manifest.agentFileFiles?.[agentFile.id]?.name).toBe(agentFile.name)
+    expect(readExportZipFileAsDataUrl(
+      parsed.files,
+      parsed.manifest.agentFileFiles![agentFile.id].path,
+      agentFile.mimeType,
+    )).toBe(agentFile.dataUrl)
   })
 })

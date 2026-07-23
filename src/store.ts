@@ -15,6 +15,8 @@ import type {
   FavoriteCollection,
   ResponsesApiResponse,
   ResponsesOutputItem,
+  AgentPresentationSpec,
+  AgentReferenceFile,
 } from './types'
 import { DEFAULT_AGENT_MAX_TOOL_ROUNDS, DEFAULT_PARAMS } from './types'
 import { DEFAULT_SETTINGS, getActiveApiProfile, getAgentImageApiProfile, getAgentTextApiProfile, getCustomProviderDefinition, mergeImportedSettings, normalizeSettings, validateApiProfile } from './lib/apiProfiles'
@@ -29,6 +31,11 @@ import {
   getAllAgentConversations,
   replaceAgentConversations,
   clearAgentConversations as dbClearAgentConversations,
+  getAgentReferenceFile,
+  getAllAgentReferenceFiles,
+  putAgentReferenceFile,
+  deleteAgentReferenceFile,
+  clearAgentReferenceFiles,
   getImage,
   getImageThumbnail,
   getStoredFreshImageThumbnail,
@@ -55,6 +62,8 @@ import { createTransparentOutputMeta, getTransparentRequestParams, removeKeyedBa
 import { blobToDataUrl, fileToDataUrl } from './lib/dataUrl'
 import { formatExportFileTime } from './lib/exportFileName'
 import { buildExportZip, readExportZip, readExportZipFileAsDataUrl } from './lib/exportZip'
+import { downloadAgentPresentation as downloadPresentationFile, getAgentPresentationImageRefs, parseAgentPresentationCallArguments } from './lib/presentation'
+import { AGENT_REFERENCE_FILE_MAX_BYTES, getAgentReferenceFileMimeType, validateAgentReferenceFiles } from './lib/agentFiles'
 
 export const ALL_FAVORITES_COLLECTION_ID = '__all_favorites__'
 export const DEFAULT_FAVORITE_COLLECTION_ID = '__default_favorites__'
@@ -109,6 +118,7 @@ type ToastType = 'info' | 'success' | 'error'
 type AgentInputDraft = {
   prompt: string
   inputImages: InputImage[]
+  inputFiles: AgentReferenceFile[]
   maskDraft: MaskDraft | null
   maskEditorImageId: string | null
   updatedAt?: number
@@ -434,6 +444,7 @@ function normalizeAgentRound(value: unknown, fallbackIndex: number): AgentRound 
     ...(typeof round.assistantMessageId === 'string' ? { assistantMessageId: round.assistantMessageId } : {}),
     prompt: typeof round.prompt === 'string' ? round.prompt : '',
     inputImageIds: normalizeStringArray(round.inputImageIds),
+    inputFiles: normalizeAgentReferenceFiles(round.inputFiles),
     maskTargetImageId: typeof round.maskTargetImageId === 'string' ? round.maskTargetImageId : null,
     maskImageId: typeof round.maskImageId === 'string' ? round.maskImageId : null,
     outputTaskIds: normalizeStringArray(round.outputTaskIds),
@@ -461,6 +472,7 @@ function normalizeAgentMessage(value: unknown): AgentMessage | null {
     content: typeof message.content === 'string' ? message.content : '',
     roundId: message.roundId,
     ...(Array.isArray(message.inputImageIds) ? { inputImageIds: normalizeStringArray(message.inputImageIds) } : {}),
+    ...(Array.isArray(message.inputFiles) ? { inputFiles: normalizeAgentReferenceFiles(message.inputFiles) } : {}),
     maskTargetImageId: typeof message.maskTargetImageId === 'string' ? message.maskTargetImageId : null,
     maskImageId: typeof message.maskImageId === 'string' ? message.maskImageId : null,
     ...(Array.isArray(message.outputTaskIds) ? { outputTaskIds: normalizeStringArray(message.outputTaskIds) } : {}),
@@ -791,6 +803,7 @@ function mergePersistedState(persistedState: unknown, currentState: AppState): A
     supportPromptSkippedForImportedData: Boolean(persisted.supportPromptSkippedForImportedData),
     prompt: restoredAgentDraft ? restoredAgentDraft.prompt : galleryInputDraft?.prompt ?? '',
     inputImages: restoredAgentDraft ? restoredAgentDraft.inputImages : galleryInputDraft?.inputImages ?? [],
+    inputFiles: restoredAgentDraft ? restoredAgentDraft.inputFiles : galleryInputDraft?.inputFiles ?? [],
     maskDraft: restoredAgentDraft ? restoredAgentDraft.maskDraft : galleryInputDraft?.maskDraft ?? null,
     maskEditorImageId: restoredAgentDraft ? restoredAgentDraft.maskEditorImageId : galleryInputDraft?.maskEditorImageId ?? null,
   }
@@ -819,6 +832,11 @@ interface AppState {
   clearInputImages: () => void
   setInputImages: (imgs: InputImage[], options?: { equivalentImageIds?: Record<string, string> }) => void
   moveInputImage: (fromIdx: number, toIdx: number) => void
+  inputFiles: AgentReferenceFile[]
+  addInputFile: (file: AgentReferenceFile) => void
+  removeInputFile: (id: string) => void
+  clearInputFiles: () => void
+  setInputFiles: (files: AgentReferenceFile[]) => void
   maskDraft: MaskDraft | null
   setMaskDraft: (draft: MaskDraft | null) => void
   clearMaskDraft: () => void
@@ -982,6 +1000,25 @@ export async function deleteImageIfUnreferenced(imageId: string) {
   }
 }
 
+function isAgentFileReferencedByState(state: AppState, fileId: string) {
+  if (state.inputFiles.some((file) => file.id === fileId)) return true
+  if (state.galleryInputDraft?.inputFiles.some((file) => file.id === fileId)) return true
+  if (Object.values(state.agentInputDrafts).some((draft) => draft.inputFiles.some((file) => file.id === fileId))) return true
+  return state.agentConversations.some((conversation) =>
+    conversation.rounds.some((round) => round.inputFiles?.some((file) => file.id === fileId)) ||
+    conversation.messages.some((message) => message.inputFiles?.some((file) => file.id === fileId)),
+  )
+}
+
+export async function deleteAgentFileIfUnreferenced(fileId: string) {
+  if (isAgentFileReferencedByState(useStore.getState(), fileId)) return
+  try {
+    await deleteAgentReferenceFile(fileId)
+  } catch {
+    // 清理失败不影响对话和输入。
+  }
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value))
 }
@@ -994,6 +1031,25 @@ function normalizeInputImages(value: unknown): InputImage[] {
       return { id: img.id, dataUrl: typeof img.dataUrl === 'string' ? img.dataUrl : '' }
     })
     .filter((img): img is InputImage => img != null)
+}
+
+function normalizeAgentReferenceFiles(value: unknown): AgentReferenceFile[] {
+  if (!Array.isArray(value)) return []
+  const ids = new Set<string>()
+  return value
+    .map((item): AgentReferenceFile | null => {
+      if (!isRecord(item) || typeof item.id !== 'string' || !item.id || ids.has(item.id)) return null
+      if (typeof item.name !== 'string' || !item.name.trim()) return null
+      if (typeof item.size !== 'number' || !Number.isFinite(item.size) || item.size <= 0) return null
+      ids.add(item.id)
+      return {
+        id: item.id,
+        name: item.name,
+        mimeType: typeof item.mimeType === 'string' && item.mimeType ? item.mimeType : 'application/octet-stream',
+        size: item.size,
+      }
+    })
+    .filter((item): item is AgentReferenceFile => item != null)
 }
 
 function normalizeMaskDraft(value: unknown): MaskDraft | null {
@@ -1012,6 +1068,7 @@ function normalizeAgentInputDraft(value: unknown, fallbackUpdatedAt = Date.now()
   return {
     prompt: typeof draft.prompt === 'string' ? draft.prompt : '',
     inputImages: normalizeInputImages(draft.inputImages),
+    inputFiles: normalizeAgentReferenceFiles(draft.inputFiles),
     maskDraft: normalizeMaskDraft(draft.maskDraft),
     maskEditorImageId: typeof draft.maskEditorImageId === 'string' ? draft.maskEditorImageId : null,
     updatedAt,
@@ -1051,10 +1108,11 @@ export function cleanStaleAgentInputDrafts(drafts: Record<string, AgentInputDraf
   return next
 }
 
-function clearInputDraftState(): Pick<AgentInputDraft, 'prompt' | 'inputImages' | 'maskDraft' | 'maskEditorImageId'> {
+function clearInputDraftState(): Pick<AgentInputDraft, 'prompt' | 'inputImages' | 'inputFiles' | 'maskDraft' | 'maskEditorImageId'> {
   return {
     prompt: '',
     inputImages: [],
+    inputFiles: [],
     maskDraft: null,
     maskEditorImageId: null,
   }
@@ -1064,16 +1122,18 @@ function copyAgentInputDraft(draft: AgentInputDraft): AgentInputDraft {
   return {
     prompt: draft.prompt,
     inputImages: draft.inputImages.map((img) => ({ ...img })),
+    inputFiles: draft.inputFiles.map((file) => ({ ...file })),
     maskDraft: draft.maskDraft ? { ...draft.maskDraft } : null,
     maskEditorImageId: draft.maskEditorImageId,
     updatedAt: draft.updatedAt ?? Date.now(),
   }
 }
 
-function getCurrentAgentInputDraft(state: Pick<AppState, 'prompt' | 'inputImages' | 'maskDraft' | 'maskEditorImageId'>): AgentInputDraft {
+function getCurrentAgentInputDraft(state: Pick<AppState, 'prompt' | 'inputImages' | 'inputFiles' | 'maskDraft' | 'maskEditorImageId'>): AgentInputDraft {
   return {
     prompt: state.prompt,
     inputImages: state.inputImages,
+    inputFiles: state.inputFiles,
     maskDraft: state.maskDraft,
     maskEditorImageId: state.maskEditorImageId,
     updatedAt: Date.now(),
@@ -1081,7 +1141,7 @@ function getCurrentAgentInputDraft(state: Pick<AppState, 'prompt' | 'inputImages
 }
 
 function isEmptyAgentInputDraft(draft: AgentInputDraft) {
-  return draft.prompt.length === 0 && draft.inputImages.length === 0 && !draft.maskDraft && !draft.maskEditorImageId
+  return draft.prompt.length === 0 && draft.inputImages.length === 0 && draft.inputFiles.length === 0 && !draft.maskDraft && !draft.maskEditorImageId
 }
 
 function setAgentInputDraft(drafts: Record<string, AgentInputDraft>, conversationId: string, draft: AgentInputDraft) {
@@ -1094,12 +1154,12 @@ function setAgentInputDraft(drafts: Record<string, AgentInputDraft>, conversatio
   return next
 }
 
-function saveActiveAgentInputDrafts(state: Pick<AppState, 'appMode' | 'activeAgentConversationId' | 'agentInputDrafts' | 'prompt' | 'inputImages' | 'maskDraft' | 'maskEditorImageId'>) {
+function saveActiveAgentInputDrafts(state: Pick<AppState, 'appMode' | 'activeAgentConversationId' | 'agentInputDrafts' | 'prompt' | 'inputImages' | 'inputFiles' | 'maskDraft' | 'maskEditorImageId'>) {
   if (state.appMode !== 'agent' || !state.activeAgentConversationId) return state.agentInputDrafts
   return setAgentInputDraft(state.agentInputDrafts, state.activeAgentConversationId, getCurrentAgentInputDraft(state))
 }
 
-function saveGalleryInputDraft(state: Pick<AppState, 'appMode' | 'galleryInputDraft' | 'prompt' | 'inputImages' | 'maskDraft' | 'maskEditorImageId'>) {
+function saveGalleryInputDraft(state: Pick<AppState, 'appMode' | 'galleryInputDraft' | 'prompt' | 'inputImages' | 'inputFiles' | 'maskDraft' | 'maskEditorImageId'>) {
   if (state.appMode !== 'gallery') return state.galleryInputDraft
   const draft = getCurrentAgentInputDraft(state)
   return isEmptyAgentInputDraft(draft) ? null : copyAgentInputDraft(draft)
@@ -1109,17 +1169,18 @@ function getPersistableGalleryInputDraft(state: AppState) {
   return saveGalleryInputDraft(state)
 }
 
-function restoreGalleryInputDraftState(draft: AgentInputDraft | null): Pick<AgentInputDraft, 'prompt' | 'inputImages' | 'maskDraft' | 'maskEditorImageId'> {
+function restoreGalleryInputDraftState(draft: AgentInputDraft | null): Pick<AgentInputDraft, 'prompt' | 'inputImages' | 'inputFiles' | 'maskDraft' | 'maskEditorImageId'> {
   if (!draft) return clearInputDraftState()
   return {
     prompt: draft.prompt,
     inputImages: draft.inputImages.map((img) => ({ ...img })),
+    inputFiles: draft.inputFiles.map((file) => ({ ...file })),
     maskDraft: draft.maskDraft ? { ...draft.maskDraft } : null,
     maskEditorImageId: draft.maskEditorImageId,
   }
 }
 
-function restoreAgentInputDraftState(drafts: Record<string, AgentInputDraft>, conversationId: string | null): Pick<AgentInputDraft, 'prompt' | 'inputImages' | 'maskDraft' | 'maskEditorImageId'> {
+function restoreAgentInputDraftState(drafts: Record<string, AgentInputDraft>, conversationId: string | null): Pick<AgentInputDraft, 'prompt' | 'inputImages' | 'inputFiles' | 'maskDraft' | 'maskEditorImageId'> {
   const draft = conversationId ? drafts[conversationId] : null
   return restoreGalleryInputDraftState(draft ?? null)
 }
@@ -1131,6 +1192,7 @@ function syncActiveInputDraft<T extends Partial<AgentInputDraft>>(
   const draft: AgentInputDraft = {
     prompt: patch.prompt ?? state.prompt,
     inputImages: patch.inputImages ?? state.inputImages,
+    inputFiles: patch.inputFiles ?? state.inputFiles,
     maskDraft: patch.maskDraft !== undefined ? patch.maskDraft : state.maskDraft,
     maskEditorImageId: patch.maskEditorImageId !== undefined ? patch.maskEditorImageId : state.maskEditorImageId,
   }
@@ -1339,6 +1401,28 @@ export const useStore = create<AppState>()(
             maskEditorImageId: null,
           })
         }),
+      inputFiles: [],
+      addInputFile: (file) =>
+        set((s) => {
+          if (s.inputFiles.some((item) => item.id === file.id)) return s
+          return syncActiveInputDraft(s, { inputFiles: [...s.inputFiles, file] })
+        }),
+      removeInputFile: (id) => {
+        set((s) => syncActiveInputDraft(s, { inputFiles: s.inputFiles.filter((file) => file.id !== id) }))
+        void deleteAgentFileIfUnreferenced(id)
+      },
+      clearInputFiles: () => {
+        const ids = get().inputFiles.map((file) => file.id)
+        set((s) => syncActiveInputDraft(s, { inputFiles: [] }))
+        for (const id of ids) void deleteAgentFileIfUnreferenced(id)
+      },
+      setInputFiles: (inputFiles) => {
+        const previous = get().inputFiles
+        set((s) => syncActiveInputDraft(s, { inputFiles: inputFiles.map((file) => ({ ...file })) }))
+        for (const file of previous) {
+          if (!inputFiles.some((item) => item.id === file.id)) void deleteAgentFileIfUnreferenced(file.id)
+        }
+      },
       setInputImages: (imgs, options) =>
         set((s) => {
           const inputImages = orderImagesWithMaskFirst(imgs, s.maskDraft?.targetImageId)
@@ -1473,17 +1557,27 @@ export const useStore = create<AppState>()(
         ),
       })),
       renameAgentConversation: (id, title) => set((state) => ({ agentConversations: state.agentConversations.map((c) => (c.id === id ? { ...c, title, updatedAt: Date.now() } : c)) })),
-      deleteAgentConversation: (id) => set((state) => {
-        const agentInputDrafts = { ...state.agentInputDrafts }
-        delete agentInputDrafts[id]
-        const activeDeleted = state.activeAgentConversationId === id
-        return {
-          agentConversations: state.agentConversations.filter((c) => c.id !== id),
-          activeAgentConversationId: activeDeleted ? null : state.activeAgentConversationId,
-          agentInputDrafts,
-          ...(activeDeleted ? clearInputDraftState() : {}),
-        }
-      }),
+      deleteAgentConversation: (id) => {
+        const conversation = get().agentConversations.find((item) => item.id === id)
+        const draft = get().agentInputDrafts[id]
+        const fileIds = [
+          ...(conversation?.rounds.flatMap((round) => round.inputFiles ?? []) ?? []),
+          ...(conversation?.messages.flatMap((message) => message.inputFiles ?? []) ?? []),
+          ...(draft?.inputFiles ?? []),
+        ].map((file) => file.id)
+        set((state) => {
+          const agentInputDrafts = { ...state.agentInputDrafts }
+          delete agentInputDrafts[id]
+          const activeDeleted = state.activeAgentConversationId === id
+          return {
+            agentConversations: state.agentConversations.filter((c) => c.id !== id),
+            activeAgentConversationId: activeDeleted ? null : state.activeAgentConversationId,
+            agentInputDrafts,
+            ...(activeDeleted ? clearInputDraftState() : {}),
+          }
+        })
+        for (const fileId of fileIds) void deleteAgentFileIfUnreferenced(fileId)
+      },
       setAgentSidebarCollapsed: (agentSidebarCollapsed) => set({ agentSidebarCollapsed }),
       setAgentAssetTab: (agentAssetTab) => set({ agentAssetTab }),
       setAgentAssetPanelCollapsed: (agentAssetPanelCollapsed) => set({ agentAssetPanelCollapsed }),
@@ -2711,6 +2805,39 @@ export function getAgentRoundPath(conversation: AgentConversation, roundId: stri
   return path
 }
 
+async function resolveAgentReferenceImage(conversationId: string, roundId: string, refId: string) {
+  const state = useStore.getState()
+  const conversation = state.agentConversations.find((item) => item.id === conversationId)
+  if (!conversation) return null
+
+  for (const round of getAgentRoundPath(conversation, roundId)) {
+    for (let index = 0; index < round.inputImageIds.length; index++) {
+      if (getAgentCurrentReferenceId(round, index) !== refId) continue
+      const imageId = round.inputImageIds[index]
+      return { imageId, dataUrl: await ensureImageCached(imageId) }
+    }
+
+    const outputImages = collectAgentRoundOutputImageSlots(round, state.tasks)
+    for (let index = 0; index < outputImages.length; index++) {
+      if (getAgentGeneratedImageReferenceId(round, index) !== refId) continue
+      const imageId = outputImages[index]
+      if (!imageId) return null
+      return { imageId, dataUrl: await ensureImageCached(imageId) }
+    }
+  }
+
+  return null
+}
+
+export async function downloadAgentPresentationFile(conversationId: string, roundId: string, spec: AgentPresentationSpec) {
+  const imagesByRef: Record<string, string> = {}
+  for (const refId of getAgentPresentationImageRefs(spec)) {
+    const image = await resolveAgentReferenceImage(conversationId, roundId, refId)
+    if (image?.dataUrl) imagesByRef[refId] = image.dataUrl
+  }
+  await downloadPresentationFile(spec, imagesByRef)
+}
+
 export function getActiveAgentRounds(conversation: AgentConversation): AgentRound[] {
   const activeRoundId = conversation.activeRoundId && conversation.rounds.some((round) => round.id === conversation.activeRoundId)
     ? conversation.activeRoundId
@@ -2923,6 +3050,13 @@ async function readAgentImageDataUrls(ids: string[]) {
 
 async function createAgentUserInputItem(conversation: AgentConversation, round: AgentRound, message: AgentMessage, tasks: TaskRecord[]) {
   const imageDataUrls = await readAgentImageDataUrls(round.inputImageIds)
+  const inputFiles = round.inputFiles ?? message.inputFiles ?? []
+  const fileParts: Array<{ type: 'input_file'; filename: string; file_data: string }> = []
+  for (const file of inputFiles) {
+    const stored = await getAgentReferenceFile(file.id)
+    if (!stored?.dataUrl) throw new Error(`参考文件“${file.name}”已不存在，请重新上传`)
+    fileParts.push({ type: 'input_file', filename: file.name, file_data: stored.dataUrl })
+  }
   const rounds = getAgentRoundPath(conversation, round.id)
   const text = replaceAgentPromptImageReferencesForApi(message.content, round, rounds, tasks)
   const referenceText = round.inputImageIds.length > 0
@@ -2932,6 +3066,7 @@ async function createAgentUserInputItem(conversation: AgentConversation, round: 
     role: 'user',
     content: [
       { type: 'input_text', text: `${text}${referenceText}` },
+      ...fileParts,
       ...imageDataUrls.map((dataUrl) => ({ type: 'input_image', image_url: dataUrl })),
     ],
   }
@@ -3211,6 +3346,13 @@ function getAgentRoundResponseOutput(round: AgentRound, tasks: TaskRecord[]): Re
 async function buildAgentApiInput(conversation: AgentConversation, currentRound: AgentRound, tasks: TaskRecord[]): Promise<unknown[]> {
   const input: unknown[] = []
   const rounds = getAgentRoundPath(conversation, currentRound.id)
+  const totalFileBytes = rounds.reduce(
+    (total, round) => total + (round.inputFiles ?? []).reduce((sum, file) => sum + file.size, 0),
+    0,
+  )
+  if (totalFileBytes > AGENT_REFERENCE_FILE_MAX_BYTES) {
+    throw new Error('当前多轮上下文中的参考文件总大小超过 50 MB，请新建对话后重试')
+  }
 
   for (const round of rounds) {
     const userMessage = conversation.messages.find((message) => message.id === round.userMessageId)
@@ -3254,7 +3396,7 @@ async function buildAgentApiInput(conversation: AgentConversation, currentRound:
 
 export async function submitAgentMessage() {
   const state = useStore.getState()
-  const { settings, prompt, inputImages, maskDraft, params, showToast } = state
+  const { settings, prompt, inputImages, inputFiles, maskDraft, params, showToast } = state
   const normalizedSettings = normalizeSettings(settings)
 
   const agentValidationError = getAgentProfileValidationError(normalizedSettings)
@@ -3329,6 +3471,14 @@ export async function submitAgentMessage() {
   const activeLeafId = activeRounds[activeRounds.length - 1]?.id ?? null
   const parentRoundId = editingRound ? editingRound.parentRoundId ?? null : activeLeafId
   const parentPath = parentRoundId ? getAgentRoundPath(conversation, parentRoundId) : []
+  const totalFileBytes = parentPath.reduce(
+    (total, item) => total + (item.inputFiles ?? []).reduce((sum, file) => sum + file.size, 0),
+    inputFiles.reduce((sum, file) => sum + file.size, 0),
+  )
+  if (totalFileBytes > AGENT_REFERENCE_FILE_MAX_BYTES) {
+    showToast('当前多轮上下文中的参考文件总大小超过 50 MB，请新建对话后重试', 'error')
+    return
+  }
   const normalizedParams = {
     ...normalizeParamsForSettings(params, requestSettings, { hasInputImages: inputImageIds.length > 0 }),
     n: DEFAULT_PARAMS.n,
@@ -3342,6 +3492,7 @@ export async function submitAgentMessage() {
     userMessageId,
     prompt: trimmedPrompt,
     inputImageIds,
+    inputFiles: inputFiles.map((file) => ({ ...file })),
     maskTargetImageId,
     maskImageId,
     outputTaskIds: [],
@@ -3356,6 +3507,7 @@ export async function submitAgentMessage() {
     content: trimmedPrompt,
     roundId,
     inputImageIds,
+    inputFiles: inputFiles.map((file) => ({ ...file })),
     maskTargetImageId,
     maskImageId,
     createdAt: now,
@@ -3391,8 +3543,13 @@ export async function submitAgentMessage() {
 
   state.setPrompt('')
   state.clearInputImages()
+  state.clearInputFiles()
   state.clearMaskDraft()
   state.setAgentEditingRoundId(null)
+
+  for (const file of editingRound?.inputFiles ?? []) {
+    if (!inputFiles.some((item) => item.id === file.id)) void deleteAgentFileIfUnreferenced(file.id)
+  }
 
   if (fallbackTitle) {
     void generateAgentConversationTitle(conversation.id, trimmedPrompt, inputImageIds, requestSettings, activeProfile, fallbackTitle)
@@ -3432,6 +3589,7 @@ export async function regenerateAgentAssistantMessage(conversationId: string, ro
   }
 
   const inputImageIds = uniqueIds(sourceRound.inputImageIds)
+  const inputFiles = (sourceRound.inputFiles ?? sourceUserMessage.inputFiles ?? []).map((file) => ({ ...file }))
   const requestSettings = createSettingsForApiProfile(normalizedSettings, activeProfile)
   const normalizedParams = {
     ...normalizeParamsForSettings(params, requestSettings, { hasInputImages: inputImageIds.length > 0 }),
@@ -3479,6 +3637,7 @@ export async function regenerateAgentAssistantMessage(conversationId: string, ro
     userMessageId: newUserMessageId,
     prompt: sourceRound.prompt || sourceUserMessage.content.trim(),
     inputImageIds,
+    inputFiles,
     maskTargetImageId: sourceRound.maskTargetImageId ?? sourceUserMessage.maskTargetImageId ?? null,
     maskImageId: sourceRound.maskImageId ?? sourceUserMessage.maskImageId ?? null,
     outputTaskIds: [],
@@ -3493,6 +3652,7 @@ export async function regenerateAgentAssistantMessage(conversationId: string, ro
     content: sourceUserMessage.content,
     roundId: newRoundId,
     inputImageIds,
+    inputFiles,
     maskTargetImageId: sourceRound.maskTargetImageId ?? sourceUserMessage.maskTargetImageId ?? null,
     maskImageId: sourceRound.maskImageId ?? sourceUserMessage.maskImageId ?? null,
     createdAt: now,
@@ -3696,31 +3856,10 @@ async function executeAgentRound(
       const dataUrls: string[] = []
       const imageIds: string[] = []
       for (const refId of referenceIds) {
-        // Resolve both generated image refs and current/user input refs from XML tags.
-        const latestConv = useStore.getState().agentConversations.find((item) => item.id === conversationId)
-        if (!latestConv) continue
-        for (const r of getAgentRoundPath(latestConv, roundId)) {
-          for (let imgIdx = 0; imgIdx < r.inputImageIds.length; imgIdx++) {
-            const currentRefId = getAgentCurrentReferenceId(r, imgIdx)
-            if (currentRefId === refId) {
-              const imageId = r.inputImageIds[imgIdx]
-              const dataUrl = await ensureImageCached(imageId)
-              if (dataUrl) dataUrls.push(dataUrl)
-              imageIds.push(imageId)
-            }
-          }
-          const outputImages = collectAgentRoundOutputImageSlots(r, useStore.getState().tasks)
-          for (let imgIdx = 0; imgIdx < outputImages.length; imgIdx++) {
-            const generatedRefId = getAgentGeneratedImageReferenceId(r, imgIdx)
-            if (generatedRefId === refId) {
-              const imageId = outputImages[imgIdx]
-              if (!imageId) continue
-              const dataUrl = await ensureImageCached(imageId)
-              if (dataUrl) dataUrls.push(dataUrl)
-              imageIds.push(imageId)
-            }
-          }
-        }
+        const image = await resolveAgentReferenceImage(conversationId, roundId, refId)
+        if (!image) continue
+        if (image.dataUrl) dataUrls.push(image.dataUrl)
+        imageIds.push(image.imageId)
       }
       return { dataUrls, imageIds }
     }
@@ -3959,6 +4098,25 @@ async function executeAgentRound(
       return JSON.stringify({ images: outputImages })
     }
 
+    const executePresentationFunctionCall = async (functionCallItem: ResponsesOutputItem): Promise<string> => {
+      const spec = parseAgentPresentationCallArguments(functionCallItem.arguments ?? '')
+      if (!spec) return JSON.stringify({ status: 'error', error: 'Invalid presentation arguments' })
+
+      const missingImageRefs: string[] = []
+      for (const refId of getAgentPresentationImageRefs(spec)) {
+        const image = await resolveAgentReferenceImage(conversationId, roundId, refId)
+        if (!image?.dataUrl) missingImageRefs.push(refId)
+      }
+
+      return JSON.stringify({
+        status: 'ready',
+        file_name: spec.fileName,
+        slide_count: spec.slides.length,
+        aspect_ratio: spec.aspectRatio,
+        ...(missingImageRefs.length > 0 ? { missing_image_refs: missingImageRefs } : {}),
+      })
+    }
+
     while (true) {
       if (controller.signal.aborted) throw createAgentAbortError()
       const textBeforeResponse = accumulatedText
@@ -4115,6 +4273,9 @@ async function executeAgentRound(
       const batchFunctionCalls = currentResponseOutputItems.filter(
         (item) => item.type === 'function_call' && item.name === 'generate_image_batch',
       )
+      const presentationFunctionCalls = currentResponseOutputItems.filter(
+        (item) => item.type === 'function_call' && item.name === 'generate_presentation',
+      )
       const continueFunctionCalls = currentResponseOutputItems.filter(
         (item) => item.type === 'function_call' && item.name === 'continue_generation',
       )
@@ -4146,6 +4307,14 @@ async function executeAgentRound(
             output,
           })
         }
+      }
+
+      for (const fc of presentationFunctionCalls) {
+        functionCallOutputs.push({
+          type: 'function_call_output',
+          call_id: fc.call_id,
+          output: await executePresentationFunctionCall(fc),
+        })
       }
 
       for (const fc of continueFunctionCalls) {
@@ -5073,11 +5242,12 @@ export interface ClearOptions {
 
 /** 清空数据 */
 export async function clearData(options: ClearOptions = { clearConfig: true, clearTasks: true }) {
-  const { setTasks, clearInputImages, clearMaskDraft, setSettings, setParams, showToast } = useStore.getState()
+  const { setTasks, clearInputImages, clearInputFiles, clearMaskDraft, setSettings, setParams, showToast } = useStore.getState()
 
   if (options.clearTasks) {
     await dbClearTasks()
     await dbClearAgentConversations()
+    await clearAgentReferenceFiles()
     await clearImages()
     imageCache.clear()
     thumbnailCache.clear()
@@ -5086,10 +5256,13 @@ export async function clearData(options: ClearOptions = { clearConfig: true, cle
     useStore.setState({
       agentConversations: [],
       activeAgentConversationId: null,
+      agentInputDrafts: {},
+      galleryInputDraft: null,
       supportPromptOpen: false,
       supportPromptSkippedForImportedData: false,
     })
     clearInputImages()
+    clearInputFiles()
     clearMaskDraft()
   }
 
@@ -5165,6 +5338,7 @@ export async function exportData(options: ExportOptions = { exportConfig: true, 
   try {
     const tasks = options.exportTasks ? await getAllTasks() : []
     const images = options.exportTasks ? await getAllImages() : []
+    const agentFiles = options.exportTasks ? await getAllAgentReferenceFiles() : []
     const { settings, agentConversations, favoriteCollections, defaultFavoriteCollectionId } = useStore.getState()
     const exportedAt = Date.now()
     const thumbnailsByImageId = new Map<string, NonNullable<Awaited<ReturnType<typeof getImageThumbnail>>>>()
@@ -5194,6 +5368,7 @@ export async function exportData(options: ExportOptions = { exportConfig: true, 
       favoriteCollections,
       defaultFavoriteCollectionId,
       agentConversations: getPersistableAgentConversations(agentConversations),
+      agentFiles,
     })
     const blob = new Blob([zipped.buffer as ArrayBuffer], { type: 'application/zip' })
     const url = URL.createObjectURL(blob)
@@ -5261,6 +5436,19 @@ export async function importData(file: File, options: ImportOptions = { importCo
         })
       }
 
+      for (const [id, info] of Object.entries(data.agentFileFiles ?? {})) {
+        const dataUrl = readExportZipFileAsDataUrl(files, info.path, info.mimeType)
+        if (!dataUrl) continue
+        await putAgentReferenceFile({
+          id,
+          name: info.name,
+          mimeType: info.mimeType,
+          size: info.size,
+          createdAt: info.createdAt,
+          dataUrl,
+        })
+      }
+
       for (const task of data.tasks) {
         await putTask(task)
       }
@@ -5320,6 +5508,35 @@ export async function importData(file: File, options: ImportOptions = { importCo
         'error',
       )
     return false
+  }
+}
+
+/** 添加 Agent 参考文件到当前输入。 */
+export async function addAgentReferenceFiles(files: File[]): Promise<AgentReferenceFile[]> {
+  const state = useStore.getState()
+  if (state.appMode !== 'agent') throw new Error('参考文件仅支持 Agent 模式')
+  validateAgentReferenceFiles(files, state.inputFiles)
+
+  const added: AgentReferenceFile[] = []
+  try {
+    for (const file of files) {
+      const metadata: AgentReferenceFile = {
+        id: `agent-file-${genId()}`,
+        name: file.name,
+        mimeType: getAgentReferenceFileMimeType(file),
+        size: file.size,
+      }
+      const dataUrl = await fileToDataUrl(file)
+      await putAgentReferenceFile({ ...metadata, dataUrl, createdAt: Date.now() })
+      useStore.getState().addInputFile(metadata)
+      added.push(metadata)
+    }
+    return added
+  } catch (err) {
+    for (const file of added) {
+      useStore.getState().removeInputFile(file.id)
+    }
+    throw err
   }
 }
 

@@ -1,6 +1,6 @@
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate'
 
-import type { AgentConversation, AppSettings, ExportData, FavoriteCollection, StoredImage, StoredImageThumbnail, TaskRecord } from '../types'
+import type { AgentConversation, AppSettings, ExportData, FavoriteCollection, StoredAgentReferenceFile, StoredImage, StoredImageThumbnail, TaskRecord } from '../types'
 import { bytesToDataUrl, dataUrlToBytes } from './dataUrl'
 import { getNumberedFileNameBase, sanitizeFileNamePart } from './exportFileName'
 
@@ -21,6 +21,7 @@ export interface BuildExportZipParams {
   favoriteCollections: FavoriteCollection[]
   defaultFavoriteCollectionId: string | null
   agentConversations: AgentConversation[]
+  agentFiles?: StoredAgentReferenceFile[]
 }
 
 export interface ExportZipContents {
@@ -36,6 +37,7 @@ export function buildExportZip(params: BuildExportZipParams) {
   const thumbnailFiles: NonNullable<ExportData['thumbnailFiles']> = {}
   const zipFiles: ZipFiles = {}
   const usedImagePaths = new Set<string>()
+  const agentFileFiles: NonNullable<ExportData['agentFileFiles']> = {}
 
   if (params.options.exportTasks) {
     for (const img of params.images) {
@@ -67,10 +69,27 @@ export function buildExportZip(params: BuildExportZipParams) {
         zipFiles[thumbnailPath] = [thumbnailBytes, { mtime: new Date(createdAt) }]
       }
     }
+
+    const referencedFileIds = new Set(params.agentConversations.flatMap((conversation) => [
+      ...conversation.rounds.flatMap((round) => (round.inputFiles ?? []).map((file) => file.id)),
+      ...conversation.messages.flatMap((message) => (message.inputFiles ?? []).map((file) => file.id)),
+    ]))
+    for (const file of params.agentFiles ?? []) {
+      if (!referencedFileIds.has(file.id)) continue
+      const path = `agent-files/${file.id}-${sanitizeFileNamePart(file.name) || 'file'}`
+      agentFileFiles[file.id] = {
+        path,
+        name: file.name,
+        mimeType: file.mimeType,
+        size: file.size,
+        createdAt: file.createdAt,
+      }
+      zipFiles[path] = [dataUrlToBytes(file.dataUrl).bytes, { mtime: new Date(file.createdAt) }]
+    }
   }
 
   const manifest: ExportData = {
-    version: 3,
+    version: 4,
     exportedAt: exportedAtDate.toISOString(),
   }
 
@@ -80,6 +99,7 @@ export function buildExportZip(params: BuildExportZipParams) {
     manifest.favoriteCollections = params.favoriteCollections
     manifest.defaultFavoriteCollectionId = params.defaultFavoriteCollectionId
     manifest.agentConversations = params.agentConversations
+    manifest.agentFileFiles = agentFileFiles
     manifest.imageFiles = imageFiles
     manifest.thumbnailFiles = thumbnailFiles
   }
@@ -103,10 +123,10 @@ export function readExportZip(bytes: Uint8Array): ExportZipContents {
   }
 }
 
-export function readExportZipFileAsDataUrl(files: Record<string, Uint8Array>, path: string): string | null {
+export function readExportZipFileAsDataUrl(files: Record<string, Uint8Array>, path: string, mimeType?: string): string | null {
   const bytes = files[path]
   if (!bytes) return null
-  return bytesToDataUrl(bytes, path)
+  return bytesToDataUrl(bytes, path, mimeType)
 }
 
 function getImageCreatedAtFallback(tasks: TaskRecord[]) {

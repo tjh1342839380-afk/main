@@ -1,15 +1,17 @@
 import { useEffect, useLayoutEffect, useMemo, useState, useRef, useCallback, type CSSProperties, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from 'react'
-import type { AgentConversation, AgentMessage, AgentRound, ResponsesOutputItem, TaskRecord } from '../types'
-import { deleteAgentRoundFromConversation, editOutputs, getActiveAgentRounds, getAgentBranchLeafId, getAgentSiblingRounds, getCachedImage, ensureImageCached, regenerateAgentAssistantMessage, remapAgentRoundMentionsForPathChange, removeMultipleTasks, removeTask, reuseConfig, useStore } from '../store'
+import type { AgentConversation, AgentMessage, AgentPresentationSpec, AgentRound, ResponsesOutputItem, TaskRecord } from '../types'
+import { deleteAgentFileIfUnreferenced, deleteAgentRoundFromConversation, downloadAgentPresentationFile, editOutputs, getActiveAgentRounds, getAgentBranchLeafId, getAgentSiblingRounds, getCachedImage, ensureImageCached, regenerateAgentAssistantMessage, remapAgentRoundMentionsForPathChange, removeMultipleTasks, removeTask, reuseConfig, useStore } from '../store'
 import { getPromptMentionParts } from '../lib/promptImageMentions'
 import { copyTextToClipboard, getClipboardFailureMessage } from '../lib/clipboard'
 import { collectWebSearchCalls, getAgentRoundOutputItems, getWebSearchStatusForCalls, type AgentWebSearchStatus } from '../lib/agentWebSearch'
 import { createMaskPreviewDataUrl } from '../lib/canvasImage'
 import { downloadImageEntriesAsZip, downloadImageIds, getImageZipEntries } from '../lib/downloadImages'
+import { parseAgentPresentationCallArguments } from '../lib/presentation'
+import { formatAgentReferenceFileSize, getAgentReferenceFileExtension } from '../lib/agentFiles'
 import TaskCard from './TaskCard'
 import MarkdownRenderer from './MarkdownRenderer'
 import { TooltipButton as AgentActionButton } from './TooltipButton'
-import { TrashIcon, DownloadIcon, EditIcon, ChevronLeftIcon, ChevronRightIcon, SidebarLeftIcon, FavoriteIcon, CloseIcon, CopyIcon, RefreshIcon, ArrowDownIcon, CheckIcon } from './icons'
+import { TrashIcon, DownloadIcon, EditIcon, ChevronLeftIcon, ChevronRightIcon, SidebarLeftIcon, FavoriteIcon, CloseIcon, CopyIcon, RefreshIcon, ArrowDownIcon, CheckIcon, FileTextIcon, PresentationIcon } from './icons'
 
 // 显示图像缩略图的组件
 function ChatImageThumb({ imageId, imageIndex, maskImageId }: { imageId: string; imageIndex: number; maskImageId?: string | null }) {
@@ -108,11 +110,107 @@ function AgentWebSearchStatusLines({ statuses }: { statuses: AgentWebSearchStatu
 }
 
 // 定义智能助手块的类型
+type AgentPresentationStatus = 'preparing' | 'ready' | 'error'
+
+function getAgentPresentationStatus(outputItems: ResponsesOutputItem[], callId: string, round: AgentRound | null) {
+  const output = outputItems.find((item) => item.type === 'function_call_output' && item.call_id === callId)?.output
+  if (!output) {
+    return {
+      status: round?.status === 'error' ? 'error' as const : 'preparing' as const,
+      error: round?.status === 'error' ? round.error || 'PPTX 生成失败' : undefined,
+      missingImageRefs: [] as string[],
+    }
+  }
+
+  try {
+    const parsed = JSON.parse(output) as { status?: unknown; error?: unknown; missing_image_refs?: unknown }
+    const missingImageRefs = Array.isArray(parsed.missing_image_refs)
+      ? parsed.missing_image_refs.filter((item): item is string => typeof item === 'string')
+      : []
+    return parsed.status === 'ready'
+      ? { status: 'ready' as const, missingImageRefs }
+      : { status: 'error' as const, error: typeof parsed.error === 'string' ? parsed.error : 'PPTX 生成失败', missingImageRefs }
+  } catch {
+    return { status: 'error' as const, error: 'PPTX 工具返回了无效结果', missingImageRefs: [] as string[] }
+  }
+}
+
+function AgentPresentationCard({
+  spec,
+  status,
+  error,
+  missingImageRefs,
+  onDownload,
+}: {
+  spec: AgentPresentationSpec | null
+  status: AgentPresentationStatus
+  error?: string
+  missingImageRefs: string[]
+  onDownload: () => Promise<void>
+}) {
+  const [downloading, setDownloading] = useState(false)
+  const ready = status === 'ready' && Boolean(spec)
+
+  const handleDownload = async () => {
+    if (!ready || downloading) return
+    setDownloading(true)
+    try {
+      await onDownload()
+    } finally {
+      setDownloading(false)
+    }
+  }
+
+  return (
+    <div className="mt-4 w-full max-w-md overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm dark:border-white/[0.09] dark:bg-gray-900/80" onClick={(event) => event.stopPropagation()}>
+      <div className="flex min-w-0 items-center gap-3 p-3.5">
+        <div className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-md bg-orange-50 text-orange-600 dark:bg-orange-500/10 dark:text-orange-400">
+          <span className="absolute -right-1 -top-1 h-8 w-9 rounded border border-orange-200/80 bg-white/70 dark:border-orange-400/20 dark:bg-gray-900/70" />
+          <PresentationIcon className="relative h-6 w-6" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-sm font-semibold text-gray-900 dark:text-gray-100">
+            {spec?.fileName || '演示文稿生成失败'}
+          </div>
+          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
+            {status === 'preparing' && <span>正在整理 PPTX...</span>}
+            {status === 'ready' && spec && (
+              <>
+                <span>{spec.slides.length} 页</span>
+                <span aria-hidden="true">·</span>
+                <span>{spec.aspectRatio === 'standard' ? '4:3' : '16:9'}</span>
+                <span aria-hidden="true">·</span>
+                <span>文字可编辑</span>
+              </>
+            )}
+            {status === 'error' && <span className="text-red-600 dark:text-red-400">{error || 'PPTX 生成失败'}</span>}
+          </div>
+        </div>
+        <button
+          type="button"
+          className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-md bg-gray-900 px-3 text-xs font-medium text-white transition-colors hover:bg-gray-700 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white dark:disabled:bg-white/10 dark:disabled:text-gray-500"
+          disabled={!ready || downloading}
+          onClick={() => void handleDownload()}
+        >
+          <DownloadIcon className="h-4 w-4" />
+          <span>{downloading ? '生成中' : status === 'preparing' ? '准备中' : '下载'}</span>
+        </button>
+      </div>
+      {missingImageRefs.length > 0 && (
+        <div className="border-t border-amber-200/70 bg-amber-50 px-3.5 py-2 text-xs text-amber-800 dark:border-amber-400/15 dark:bg-amber-400/[0.07] dark:text-amber-300">
+          {missingImageRefs.length} 个图片引用不可用，下载文件中将显示占位区域
+        </div>
+      )}
+    </div>
+  )
+}
+
 type AgentAssistantBlock =
   | { type: 'web-search'; status: AgentWebSearchStatus; key: string }
   | { type: 'batch-params'; status: AgentWebSearchStatus; key: string }
   | { type: 'image-task'; task: TaskRecord; key: string }
   | { type: 'deleted-image-task'; taskId: string; key: string }
+  | { type: 'presentation'; spec: AgentPresentationSpec | null; status: AgentPresentationStatus; error?: string; missingImageRefs: string[]; callId: string; key: string }
   | { type: 'text'; key: string; content?: string }
 
 // 定义智能助手轮次任务槽的接口
@@ -199,6 +297,21 @@ function getAgentAssistantBlocks(round: AgentRound | null, taskSlots: AgentRound
     flushWebSearchGroup()
 
     // 检查输出项是否对应图像任务，如果是则添加到块列表中
+    if (item.type === 'function_call' && item.name === 'generate_presentation') {
+      const callId = item.call_id ?? item.id ?? `presentation-${blocks.length}`
+      const result = getAgentPresentationStatus(outputItems, callId, round)
+      blocks.push({
+        type: 'presentation',
+        spec: parseAgentPresentationCallArguments(item.arguments ?? ''),
+        status: result.status,
+        error: result.error,
+        missingImageRefs: result.missingImageRefs,
+        callId,
+        key: `presentation:${callId}`,
+      })
+      continue
+    }
+
     const imageTask = getImageTaskForOutputItem(item, tasksForRound)
     if (imageTask && !renderedTaskIds.has(imageTask.id)) {
       renderedTaskIds.add(imageTask.id)
@@ -311,6 +424,7 @@ export default function AgentWorkspace() {
   const setDetailTaskId = useStore((s) => s.setDetailTaskId)
   const setPrompt = useStore((s) => s.setPrompt)
   const setInputImages = useStore((s) => s.setInputImages)
+  const setInputFiles = useStore((s) => s.setInputFiles)
   const setMaskDraft = useStore((s) => s.setMaskDraft)
   const clearMaskDraft = useStore((s) => s.clearMaskDraft)
   const setAppMode = useStore((s) => s.setAppMode)
@@ -783,6 +897,7 @@ export default function AgentWorkspace() {
               agentEditingRoundId: state.agentEditingRoundId === round.id ? null : state.agentEditingRoundId,
             }
           })
+          for (const file of round.inputFiles ?? []) void deleteAgentFileIfUnreferenced(file.id)
           return
         }
 
@@ -825,6 +940,7 @@ export default function AgentWorkspace() {
   const handleEditRoundMessage = async (round: AgentRound, content: string) => {
     setAgentEditingRoundId(round.id)
     clearMaskDraft()
+    setInputFiles(round.inputFiles ?? [])
 
     const inputImages = await Promise.all(
       round.inputImageIds.map(async (id) => ({
@@ -1122,6 +1238,24 @@ export default function AgentWorkspace() {
                       </div>
                     )}
 
+                    {message.role === 'user' && (round?.inputFiles?.length ?? 0) > 0 && (
+                      <div className="mb-3 flex max-w-full flex-wrap gap-2" onClick={(e) => e.stopPropagation()}>
+                        {round?.inputFiles?.map((file) => (
+                          <div key={file.id} className="flex min-w-0 max-w-full items-center gap-2 rounded-lg border border-gray-200/80 bg-white/70 px-2.5 py-2 dark:border-white/[0.08] dark:bg-white/[0.04]">
+                            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-orange-50 text-orange-600 dark:bg-orange-500/10 dark:text-orange-400">
+                              <FileTextIcon className="h-4 w-4" />
+                            </span>
+                            <span className="min-w-0">
+                              <span className="block max-w-56 truncate text-xs font-medium text-gray-700 dark:text-gray-200">{file.name}</span>
+                              <span className="mt-0.5 block text-[10px] uppercase text-gray-400 dark:text-gray-500">
+                                {getAgentReferenceFileExtension(file.name) || 'FILE'} · {formatAgentReferenceFileSize(file.size)}
+                              </span>
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
                     {round?.status === 'error' && isAssistant && message.content.startsWith('请求失败：') ? (
                       <div
                         data-selectable-text
@@ -1164,6 +1298,27 @@ export default function AgentWorkspace() {
                                   <div key={block.key} className={index > 0 ? 'mt-3' : undefined}>
                                     <AgentWebSearchInlineStatus status={block.status} />
                                   </div>
+                                )
+                              }
+                              if (block.type === 'presentation') {
+                                return (
+                                  <AgentPresentationCard
+                                    key={block.key}
+                                    spec={block.spec}
+                                    status={block.status}
+                                    error={block.error}
+                                    missingImageRefs={block.missingImageRefs}
+                                    onDownload={async () => {
+                                      if (!conversation || !round || !block.spec) return
+                                      try {
+                                        await downloadAgentPresentationFile(conversation.id, round.id, block.spec)
+                                        showToast('PPTX 下载成功', 'success')
+                                      } catch (err) {
+                                        console.error(err)
+                                        showToast(err instanceof Error ? err.message : 'PPTX 生成失败', 'error')
+                                      }
+                                    }}
+                                  />
                                 )
                               }
                               if (block.type === 'deleted-image-task') {

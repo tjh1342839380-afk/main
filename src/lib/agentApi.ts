@@ -57,6 +57,16 @@ const AGENT_MATH_FORMATTING_INSTRUCTIONS = [
   '- Do not use LaTeX delimiters like `\\(...\\)` or `\\[...\\]` in visible assistant text.',
 ].join('\n')
 
+const AGENT_PRESENTATION_INSTRUCTIONS = [
+  '## PowerPoint presentations',
+  '- When the user asks for a PPT, PPTX, slide deck, or presentation file, create a real downloadable presentation with generate_presentation.',
+  '- Keep slide text concise and editable. Use title, section, content, image, and split layouts intentionally instead of putting all content into generated slide screenshots.',
+  '- Generate any required visual assets first. Call continue_generation after prerequisite image generation, then call generate_presentation only when every image_ref is already available in context.',
+  '- image_ref must be the id from an existing <ref id="..." /> tag. Never invent a reference id and never include the XML wrapper in image_ref.',
+  '- Use 16:9 wide format unless the user explicitly requests 4:3. Include speaker notes when they materially help the presenter.',
+  '- After generate_presentation succeeds, tell the user the editable PPTX is ready to download. Do not output the presentation as a Markdown code block.',
+].join('\n')
+
 function createAgentInstructions(settings: AppSettings) {
   const maxToolRounds = Number.isFinite(settings.agentMaxToolRounds)
     ? Math.max(1, Math.trunc(settings.agentMaxToolRounds))
@@ -79,6 +89,7 @@ function createAgentInstructions(settings: AppSettings) {
   ]
 
   if (settings.agentMathFormattingPrompt) instructions.push('', AGENT_MATH_FORMATTING_INSTRUCTIONS)
+  if (settings.agentApiConfigMode === 'hybrid') instructions.push('', AGENT_PRESENTATION_INSTRUCTIONS)
 
   return instructions.join('\n')
 }
@@ -162,6 +173,92 @@ function createGenerateImageFunctionTool() {
   }
 }
 
+function createPresentationFunctionTool() {
+  return {
+    type: 'function',
+    name: 'generate_presentation',
+    description: 'Create a real editable PowerPoint .pptx file in the app. Use this when the user asks for a PPT, presentation, slide deck, or PowerPoint file.',
+    parameters: {
+      type: 'object',
+      properties: {
+        title: {
+          type: 'string',
+          description: 'Presentation title.',
+        },
+        subtitle: {
+          type: ['string', 'null'],
+          description: 'Optional presentation subtitle.',
+        },
+        file_name: {
+          type: 'string',
+          description: 'Download file name ending in .pptx.',
+        },
+        aspect_ratio: {
+          type: 'string',
+          enum: ['wide', 'standard'],
+          description: 'wide is 16:9 and standard is 4:3.',
+        },
+        theme: {
+          type: 'string',
+          enum: ['light', 'dark'],
+          description: 'Overall presentation color theme.',
+        },
+        accent_color: {
+          type: 'string',
+          description: 'Six-digit hex accent color without #, for example 2563EB.',
+        },
+        footer: {
+          type: ['string', 'null'],
+          description: 'Optional short footer shown on non-title slides.',
+        },
+        slides: {
+          type: 'array',
+          minItems: 1,
+          maxItems: 40,
+          description: 'Presentation slides in display order.',
+          items: {
+            type: 'object',
+            properties: {
+              layout: {
+                type: 'string',
+                enum: ['title', 'section', 'content', 'image', 'split'],
+                description: 'title for cover, section for dividers, content for text, image for image-led pages, split for text and image.',
+              },
+              title: {
+                type: 'string',
+                description: 'Editable slide title.',
+              },
+              subtitle: {
+                type: ['string', 'null'],
+                description: 'Optional editable supporting text.',
+              },
+              bullets: {
+                type: 'array',
+                maxItems: 8,
+                items: { type: 'string' },
+                description: 'Concise editable bullet points. Use an empty array for title or image-only slides.',
+              },
+              image_ref: {
+                type: ['string', 'null'],
+                description: 'Optional existing image reference id such as round-1-image-1, without the XML tag wrapper.',
+              },
+              notes: {
+                type: ['string', 'null'],
+                description: 'Optional speaker notes for this slide.',
+              },
+            },
+            required: ['layout', 'title', 'subtitle', 'bullets', 'image_ref', 'notes'],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: ['title', 'subtitle', 'file_name', 'aspect_ratio', 'theme', 'accent_color', 'footer', 'slides'],
+      additionalProperties: false,
+    },
+    strict: true,
+  }
+}
+
 function createAgentTools(params: TaskParams, profile: ApiProfile, settings: AppSettings, maskDataUrl?: string): Array<Record<string, unknown>> {
   const tools: Array<Record<string, unknown>> = settings.agentApiConfigMode === 'hybrid'
     ? [createGenerateImageFunctionTool()]
@@ -210,6 +307,10 @@ function createAgentTools(params: TaskParams, profile: ApiProfile, settings: App
     },
     strict: true,
   })
+
+  if (settings.agentApiConfigMode === 'hybrid') {
+    tools.push(createPresentationFunctionTool())
+  }
 
   // continue_generation: model calls this to request another round (e.g. after generating a prerequisite image)
   tools.push({

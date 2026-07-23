@@ -2,10 +2,12 @@ export default function DragUploadOverlay({
   visible,
   atImageLimit,
   maxImages,
+  agentMode,
 }: {
   visible: boolean
   atImageLimit: boolean
   maxImages: number
+  agentMode: boolean
 }) {
   if (!visible) return null
 
@@ -15,7 +17,7 @@ export default function DragUploadOverlay({
         <div className={`w-20 h-20 rounded-full border-2 border-dashed flex items-center justify-center ${
           atImageLimit ? 'bg-red-50 dark:bg-red-500/10 border-red-300' : 'bg-blue-50 dark:bg-blue-500/10 border-blue-400'
         }`}>
-          {atImageLimit ? (
+          {atImageLimit && !agentMode ? (
             <svg className="w-10 h-10 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
             </svg>
@@ -26,15 +28,15 @@ export default function DragUploadOverlay({
           )}
         </div>
         <div className="text-center">
-          {atImageLimit ? (
+          {atImageLimit && !agentMode ? (
             <>
               <p className="text-lg font-semibold text-red-500">已达上限 {maxImages} 张</p>
               <p className="text-sm text-gray-400 mt-1">请先移除部分参考图后再添加</p>
             </>
           ) : (
             <>
-              <p className="text-lg font-semibold text-gray-700 dark:text-gray-200">释放以上传图片</p>
-              <p className="text-sm text-gray-400 mt-1">支持 JPG、PNG、WebP 等格式</p>
+              <p className="text-lg font-semibold text-gray-700 dark:text-gray-200">释放以上传{agentMode ? '附件' : '图片'}</p>
+              <p className="text-sm text-gray-400 mt-1">{agentMode ? '支持图片、PPTX、PDF、Word、表格等格式' : '支持 JPG、PNG、WebP 等格式'}</p>
             </>
           )}
         </div>

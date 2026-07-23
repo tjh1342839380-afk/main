@@ -2,13 +2,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { strToU8, zipSync } from 'fflate'
 import { DEFAULT_PARAMS } from './types'
 import { createDefaultFalProfile, createDefaultOpenAIProfile, DEFAULT_RESPONSES_MODEL, DEFAULT_SETTINGS, normalizeSettings } from './lib/apiProfiles'
-import type { AgentConversation, ExportData, StoredImage, StoredImageThumbnail, TaskRecord } from './types'
+import type { AgentConversation, ExportData, StoredAgentReferenceFile, StoredImage, StoredImageThumbnail, TaskRecord } from './types'
 import { getSelectedImageMentionLabel } from './lib/promptImageMentions'
 vi.mock('./lib/db', () => {
   const tasks = new Map<string, TaskRecord>()
   const images = new Map<string, StoredImage>()
   const thumbnails = new Map<string, StoredImageThumbnail>()
   const agentConversations = new Map<string, AgentConversation>()
+  const agentFiles = new Map<string, StoredAgentReferenceFile>()
   let imageSeq = 0
 
   return {
@@ -38,6 +39,18 @@ vi.mock('./lib/db', () => {
     replaceAgentConversations: async (conversations: AgentConversation[]) => {
       agentConversations.clear()
       for (const conversation of conversations) agentConversations.set(conversation.id, conversation)
+    },
+    getAgentReferenceFile: async (id: string) => agentFiles.get(id),
+    getAllAgentReferenceFiles: async () => [...agentFiles.values()],
+    putAgentReferenceFile: async (file: StoredAgentReferenceFile) => {
+      agentFiles.set(file.id, file)
+      return file.id
+    },
+    deleteAgentReferenceFile: async (id: string) => {
+      agentFiles.delete(id)
+    },
+    clearAgentReferenceFiles: async () => {
+      agentFiles.clear()
     },
     getImage: async (id: string) => images.get(id),
     getImageThumbnail: async (id: string) => thumbnails.get(id),
@@ -127,7 +140,7 @@ vi.mock('./lib/agentApi', () => ({
     }
   }),
 }))
-import { clearAgentConversations, clearImages, clearTasks, getAllAgentConversations, getAllTasks, getImage, putAgentConversation, putImage, putTask as putDbTask } from './lib/db'
+import { clearAgentConversations, clearAgentReferenceFiles, clearImages, clearTasks, getAllAgentConversations, getAllTasks, getImage, putAgentConversation, putAgentReferenceFile, putImage, putTask as putDbTask } from './lib/db'
 import { callAgentResponsesApi, callBatchImageSingle } from './lib/agentApi'
 import { getFalQueuedImageResult } from './lib/falAiImageApi'
 import { removeKeyedBackgroundFromDataUrl } from './lib/transparentImage'
@@ -567,6 +580,7 @@ describe('input persistence setting', () => {
 describe('agent conversation persistence', () => {
   beforeEach(async () => {
     await clearAgentConversations()
+    await clearAgentReferenceFiles()
   })
 
   it('omits agent conversations from localStorage state', () => {
@@ -665,6 +679,7 @@ describe('agent conversation persistence', () => {
         [storedConversation.id]: {
           prompt: '未发送草稿',
           inputImages: [],
+          inputFiles: [],
           maskDraft: null,
           maskEditorImageId: null,
           updatedAt: Date.now(),
@@ -995,6 +1010,7 @@ describe('data import', () => {
       showToast: vi.fn(),
     })
     await clearAgentConversations()
+    await clearAgentReferenceFiles()
   })
 
   it('restores favorite collections and default collection when importing task data', async () => {
@@ -1240,6 +1256,7 @@ describe('agent draft lifecycle', () => {
         'conversation-a': {
           prompt: draftState.prompt,
           inputImages: draftState.inputImages,
+          inputFiles: [],
           maskDraft: draftState.maskDraft,
           maskEditorImageId: imageA.id,
         },
@@ -1268,6 +1285,7 @@ describe('agent draft lifecycle', () => {
       galleryInputDraft: {
         prompt: galleryPrompt,
         inputImages: [imageB],
+        inputFiles: [],
         maskDraft: null,
         maskEditorImageId: null,
       },
@@ -1332,9 +1350,9 @@ describe('agent draft lifecycle', () => {
     const now = 10 * 24 * 60 * 60 * 1000
     const staleUpdatedAt = now - 3 * 24 * 60 * 60 * 1000 - 1
     const recentUpdatedAt = now - 3 * 24 * 60 * 60 * 1000
-    const activeDraft = { prompt: 'active', inputImages: [], maskDraft: null, maskEditorImageId: null, updatedAt: staleUpdatedAt }
-    const staleDraft = { prompt: 'stale', inputImages: [], maskDraft: null, maskEditorImageId: null, updatedAt: staleUpdatedAt }
-    const recentDraft = { prompt: 'recent', inputImages: [], maskDraft: null, maskEditorImageId: null, updatedAt: recentUpdatedAt }
+    const activeDraft = { prompt: 'active', inputImages: [], inputFiles: [], maskDraft: null, maskEditorImageId: null, updatedAt: staleUpdatedAt }
+    const staleDraft = { prompt: 'stale', inputImages: [], inputFiles: [], maskDraft: null, maskEditorImageId: null, updatedAt: staleUpdatedAt }
+    const recentDraft = { prompt: 'recent', inputImages: [], inputFiles: [], maskDraft: null, maskEditorImageId: null, updatedAt: recentUpdatedAt }
 
     const cleaned = cleanStaleAgentInputDrafts({
       'conversation-a': activeDraft,
@@ -1369,6 +1387,7 @@ describe('agent context for removed outputs', () => {
       }),
       prompt: '继续',
       inputImages: [],
+      inputFiles: [],
       maskDraft: null,
       params: { ...DEFAULT_PARAMS },
       appMode: 'agent',
@@ -1417,6 +1436,30 @@ describe('agent context for removed outputs', () => {
       outputItems: [{ type: 'message', content: [{ type: 'output_text', text: 'ok' }] }],
       responseId: 'response-b',
     })
+  })
+
+  it('sends uploaded reference files as Responses input_file parts', async () => {
+    const file = {
+      id: 'agent-file-pptx',
+      name: '品牌参考.pptx',
+      mimeType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+      size: 12,
+    }
+    await putAgentReferenceFile({
+      ...file,
+      dataUrl: 'data:application/vnd.openxmlformats-officedocument.presentationml.presentation;base64,UEsDBA==',
+      createdAt: 1,
+    })
+    useStore.setState({ inputFiles: [file] })
+
+    await submitAgentMessage()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    const input = vi.mocked(callAgentResponsesApi).mock.calls[0][0].input
+    expect(JSON.stringify(input)).toContain('input_file')
+    expect(JSON.stringify(input)).toContain('品牌参考.pptx')
+    expect(JSON.stringify(input)).toContain('UEsDBA==')
+    expect(useStore.getState().inputFiles).toEqual([])
   })
 
   it('does not send removed image_generation results back to the model', async () => {
@@ -1800,6 +1843,7 @@ describe('agent built-in image tool failure', () => {
     await clearTasks()
     await clearImages()
     await clearAgentConversations()
+    await clearAgentReferenceFiles()
     vi.mocked(callAgentResponsesApi).mockClear()
     useStore.setState({
       settings: normalizeSettings({

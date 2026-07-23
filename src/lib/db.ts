@@ -1,13 +1,14 @@
-import type { AgentConversation, TaskRecord, StoredImage, StoredImageThumbnail } from '../types'
+import type { AgentConversation, StoredAgentReferenceFile, TaskRecord, StoredImage, StoredImageThumbnail } from '../types'
 
 const DB_NAME = 'gpt-image-2-for-tjh'
 const LEGACY_DB_NAME = 'gpt-image-' + 'playground'
 const LEGACY_DB_MIGRATION_STORAGE_KEY = 'gpt-image-2-for-tjh:indexeddb-migrated'
-const DB_VERSION = 3
+const DB_VERSION = 4
 const STORE_TASKS = 'tasks'
 const STORE_IMAGES = 'images'
 const STORE_THUMBNAILS = 'thumbnails'
 const STORE_AGENT_CONVERSATIONS = 'agentConversations'
+const STORE_AGENT_FILES = 'agentFiles'
 const THUMBNAIL_MAX_SIZE = 720
 const THUMBNAIL_QUALITY = 0.9
 const THUMBNAIL_VERSION = 2
@@ -26,6 +27,9 @@ function createSchema(db: IDBDatabase) {
   }
   if (!db.objectStoreNames.contains(STORE_AGENT_CONVERSATIONS)) {
     db.createObjectStore(STORE_AGENT_CONVERSATIONS, { keyPath: 'id' })
+  }
+  if (!db.objectStoreNames.contains(STORE_AGENT_FILES)) {
+    db.createObjectStore(STORE_AGENT_FILES, { keyPath: 'id' })
   }
 }
 
@@ -92,7 +96,7 @@ async function migrateLegacyDBIfNeeded(db: IDBDatabase) {
   let legacyDB: IDBDatabase | null = null
   try {
     legacyDB = await openNamedDB(LEGACY_DB_NAME)
-    for (const storeName of [STORE_TASKS, STORE_IMAGES, STORE_THUMBNAILS, STORE_AGENT_CONVERSATIONS]) {
+    for (const storeName of [STORE_TASKS, STORE_IMAGES, STORE_THUMBNAILS, STORE_AGENT_CONVERSATIONS, STORE_AGENT_FILES]) {
       const items = await getAllFromDB(legacyDB, storeName)
       if (items.length > 0) await putAllToDB(db, storeName, items)
     }
@@ -173,6 +177,28 @@ export function replaceAgentConversations(conversations: AgentConversation[]): P
         tx.onabort = () => reject(tx.error)
       }),
   )
+}
+
+// ===== Agent reference files =====
+
+export function getAgentReferenceFile(id: string): Promise<StoredAgentReferenceFile | undefined> {
+  return dbTransaction(STORE_AGENT_FILES, 'readonly', (s) => s.get(id))
+}
+
+export function getAllAgentReferenceFiles(): Promise<StoredAgentReferenceFile[]> {
+  return dbTransaction(STORE_AGENT_FILES, 'readonly', (s) => s.getAll())
+}
+
+export function putAgentReferenceFile(file: StoredAgentReferenceFile): Promise<IDBValidKey> {
+  return dbTransaction(STORE_AGENT_FILES, 'readwrite', (s) => s.put(file))
+}
+
+export function deleteAgentReferenceFile(id: string): Promise<undefined> {
+  return dbTransaction(STORE_AGENT_FILES, 'readwrite', (s) => s.delete(id))
+}
+
+export function clearAgentReferenceFiles(): Promise<undefined> {
+  return dbTransaction(STORE_AGENT_FILES, 'readwrite', (s) => s.clear())
 }
 
 // ===== Images =====

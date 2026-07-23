@@ -1,6 +1,6 @@
 import { useRef, useEffect, useCallback, useState, useMemo, useLayoutEffect } from 'react'
 import { createPortal } from 'react-dom'
-import { ALL_FAVORITES_COLLECTION_ID, deleteFavoriteCollection, getTaskFavoriteCollectionIds, useStore, submitTask, submitAgentMessage, stopAgentResponse, addImageFromFile, createInputImageFromFile, deleteImageIfUnreferenced, removeMultipleTasks, referenceTaskOutputs, getCachedImage, ensureImageCached, getActiveAgentRounds, taskMatchesFavoriteScope, taskMatchesFilterStatus, taskMatchesSearchQuery } from '../store'
+import { ALL_FAVORITES_COLLECTION_ID, deleteFavoriteCollection, getTaskFavoriteCollectionIds, useStore, submitTask, submitAgentMessage, stopAgentResponse, addAgentReferenceFiles, addImageFromFile, createInputImageFromFile, deleteImageIfUnreferenced, removeMultipleTasks, referenceTaskOutputs, getCachedImage, ensureImageCached, getActiveAgentRounds, taskMatchesFavoriteScope, taskMatchesFilterStatus, taskMatchesSearchQuery } from '../store'
 import { DEFAULT_PARAMS, type TaskRecord } from '../types'
 import { getActiveApiProfile, getAgentImageApiProfile, normalizeSettings } from '../lib/apiProfiles'
 import { DEFAULT_FAL_IMAGE_SIZE, getChangedParams, getOutputImageLimitForSettings, normalizeParamsForSettings } from '../lib/paramCompatibility'
@@ -9,10 +9,11 @@ import { normalizeImageSize } from '../lib/size'
 import { createMaskPreviewDataUrl } from '../lib/canvasImage'
 import { getSafeBoundingClientRect } from '../lib/domRect'
 import { collectAgentRoundOutputImageSlots } from '../lib/agentImageReferences'
+import { AGENT_REFERENCE_FILE_ACCEPT, formatAgentReferenceFileSize, getAgentReferenceFileExtension } from '../lib/agentFiles'
 import { useHintTooltip } from '../hooks/useHintTooltip'
 import { downloadImageEntriesAsZip, downloadImageIds, formatExportFileTime, getTaskOutputImageZipEntries } from '../lib/downloadImages'
 import SizePickerModal from './SizePickerModal'
-import { CloseIcon, MicrophoneIcon } from './icons'
+import { CloseIcon, FileTextIcon, MicrophoneIcon } from './icons'
 import ButtonTooltip from './input/buttonTooltip'
 import DragUploadOverlay from './input/dragUploadOverlay'
 import InputBatchBars from './input/inputBatchBars'
@@ -442,6 +443,9 @@ export default function InputBar() {
   const replaceInputImage = useStore((s) => s.replaceInputImage)
   const removeInputImage = useStore((s) => s.removeInputImage)
   const clearInputImages = useStore((s) => s.clearInputImages)
+  const inputFiles = useStore((s) => s.inputFiles)
+  const removeInputFile = useStore((s) => s.removeInputFile)
+  const clearInputFiles = useStore((s) => s.clearInputFiles)
   const params = useStore((s) => s.params)
   const setParams = useStore((s) => s.setParams)
   const settings = useStore((s) => s.settings)
@@ -670,6 +674,7 @@ export default function InputBar() {
   const moveInputImage = useStore((s) => s.moveInputImage)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const referenceFileInputRef = useRef<HTMLInputElement>(null)
   const cameraInputRef = useRef<HTMLInputElement>(null)
   const replaceFileInputRef = useRef<HTMLInputElement>(null)
   const textareaRef = useRef<HTMLDivElement>(null)
@@ -681,6 +686,7 @@ export default function InputBar() {
   const [isSingleLine, setIsSingleLine] = useState(true)
   const [submitHover, setSubmitHover] = useState(false)
   const [attachHover, setAttachHover] = useState(false)
+  const [referenceFileHover, setReferenceFileHover] = useState(false)
   const [speechHover, setSpeechHover] = useState(false)
   const [speechStarting, setSpeechStarting] = useState(false)
   const [speechListening, setSpeechListening] = useState(false)
@@ -1361,6 +1367,20 @@ export default function InputBar() {
   const handleFilesRef = useRef(handleFiles)
   handleFilesRef.current = handleFiles
 
+  const handleReferenceFiles = async (files: FileList | File[]) => {
+    const selected = Array.from(files)
+    if (selected.length === 0) return
+    try {
+      const added = await addAgentReferenceFiles(selected)
+      showToast(`已添加 ${added.length} 个参考文件`, 'success')
+    } catch (err) {
+      showToast(`参考文件添加失败：${err instanceof Error ? err.message : String(err)}`, 'error')
+    }
+  }
+
+  const handleReferenceFilesRef = useRef(handleReferenceFiles)
+  handleReferenceFilesRef.current = handleReferenceFiles
+
   const openReplaceReferenceFilePicker = useCallback((idx: number, imageId: string) => {
     replaceImageTargetRef.current = { index: idx, id: imageId }
     replaceFileInputRef.current?.click()
@@ -1413,6 +1433,11 @@ export default function InputBar() {
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     await handleFilesRef.current(e.target.files || [])
+    e.target.value = ''
+  }
+
+  const handleReferenceFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    await handleReferenceFilesRef.current(e.target.files || [])
     e.target.value = ''
   }
 
@@ -1549,7 +1574,7 @@ export default function InputBar() {
     return () => document.removeEventListener('paste', handlePaste)
   }, [])
 
-  // 拖拽图片 - 监听整个页面
+  // 拖拽附件 - 监听整个页面
   useEffect(() => {
     const handleDragEnter = (e: DragEvent) => {
       e.preventDefault()
@@ -1581,7 +1606,17 @@ export default function InputBar() {
       setIsDragging(false)
       const files = e.dataTransfer?.files
       if (files && files.length > 0) {
-        handleFilesRef.current(files)
+        const allFiles = Array.from(files)
+        const images = allFiles.filter((file) => file.type.startsWith('image/'))
+        const referenceFiles = allFiles.filter((file) => !file.type.startsWith('image/'))
+        if (images.length > 0) void handleFilesRef.current(images)
+        if (referenceFiles.length > 0) {
+          if (useStore.getState().appMode === 'agent') {
+            void handleReferenceFilesRef.current(referenceFiles)
+          } else {
+            showToast('参考文件仅支持 Agent 模式', 'error')
+          }
+        }
         return
       }
 
@@ -2191,7 +2226,7 @@ export default function InputBar() {
 
   return (
     <>
-      <DragUploadOverlay visible={isDragging} atImageLimit={atImageLimit} maxImages={API_MAX_IMAGES} />
+      <DragUploadOverlay visible={isDragging} atImageLimit={atImageLimit} maxImages={API_MAX_IMAGES} agentMode={appMode === 'agent'} />
 
       {showSizePicker && (
         <SizePickerModal
@@ -2240,6 +2275,42 @@ export default function InputBar() {
           >
             <div className={`w-10 h-1 rounded-full bg-gray-300 dark:bg-white/[0.06] transition-transform duration-200 ${mobileCollapsed ? 'scale-x-75' : ''}`} />
           </div>
+
+          {appMode === 'agent' && inputFiles.length > 0 && (
+            <div className="mb-3 flex max-w-full items-center gap-2 overflow-x-auto pb-1 custom-scrollbar">
+              {inputFiles.map((file) => (
+                <div key={file.id} className="flex h-11 min-w-0 max-w-[220px] shrink-0 items-center gap-2 rounded-lg border border-gray-200/80 bg-white/60 pl-2 pr-1.5 dark:border-white/[0.08] dark:bg-white/[0.04]">
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-orange-50 text-orange-600 dark:bg-orange-500/10 dark:text-orange-400">
+                    <FileTextIcon className="h-4 w-4" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-xs font-medium text-gray-700 dark:text-gray-200">{file.name}</span>
+                    <span className="mt-0.5 block text-[10px] uppercase text-gray-400 dark:text-gray-500">
+                      {getAgentReferenceFileExtension(file.name) || 'FILE'} · {formatAgentReferenceFileSize(file.size)}
+                    </span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => removeInputFile(file.id)}
+                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-gray-400 transition-colors hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-500/10"
+                    aria-label={`移除参考文件 ${file.name}`}
+                    title="移除参考文件"
+                  >
+                    <CloseIcon className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ))}
+              {inputFiles.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => clearInputFiles()}
+                  className="h-11 shrink-0 rounded-lg border border-dashed border-gray-300 px-3 text-xs text-gray-400 transition-colors hover:border-red-300 hover:bg-red-50/50 hover:text-red-500 dark:border-white/[0.08] dark:hover:bg-red-500/10"
+                >
+                  清空文件
+                </button>
+              )}
+            </div>
+          )}
 
           {/* 输入图片行（移动端可折叠） */}
           {inputImages.length > 0 && (
@@ -2387,6 +2458,23 @@ export default function InputBar() {
                     </svg>
                   </button>
                 </div>
+                {appMode === 'agent' && (
+                  <div
+                    className="relative"
+                    onMouseEnter={() => setReferenceFileHover(true)}
+                    onMouseLeave={() => setReferenceFileHover(false)}
+                  >
+                    <ButtonTooltip visible={referenceFileHover} text="上传参考文件" />
+                    <button
+                      type="button"
+                      onClick={() => referenceFileInputRef.current?.click()}
+                      className="p-2.5 rounded-xl bg-gray-200 text-gray-500 shadow-sm transition-all hover:bg-gray-300 hover:shadow dark:bg-white/[0.06] dark:text-gray-300 dark:hover:bg-white/[0.1]"
+                      aria-label="上传参考文件"
+                    >
+                      <FileTextIcon className="h-5 w-5" />
+                    </button>
+                  </div>
+                )}
                 <div
                   className="relative"
                   onMouseEnter={() => setSpeechHover(true)}
@@ -2459,16 +2547,16 @@ export default function InputBar() {
                 >
                   <button
                     onClick={() => {
-                      if (!atImageLimit) {
+                      if (!atImageLimit || appMode === 'agent') {
                         setShowMobileUploadMenu(!showMobileUploadMenu)
                       }
                     }}
                     className={`p-2.5 rounded-xl transition-all shadow-sm flex-shrink-0 ${
-                      atImageLimit
+                      atImageLimit && appMode !== 'agent'
                         ? 'bg-gray-200 dark:bg-white/[0.04] text-gray-300 dark:text-gray-500 cursor-not-allowed'
                         : 'bg-gray-200 dark:bg-white/[0.06] hover:bg-gray-300 dark:hover:bg-white/[0.1] text-gray-500 dark:text-gray-300'
                     }`}
-                    aria-label={uploadImageTooltipText}
+                    aria-label={appMode === 'agent' ? '添加图片或参考文件' : uploadImageTooltipText}
                   >
                     <svg
                       className={`w-5 h-5 transition-transform duration-200 ${showMobileUploadMenu ? 'rotate-90' : ''}`}
@@ -2487,7 +2575,7 @@ export default function InputBar() {
                         className="fixed inset-0 z-40"
                         onClick={() => setShowMobileUploadMenu(false)}
                       />
-                      <div className="absolute bottom-full left-0 mb-2 w-32 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-100 dark:border-gray-700 overflow-hidden z-50 animate-in fade-in slide-in-from-bottom-2 duration-200">
+                      <div className="absolute bottom-full left-0 mb-2 w-40 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-100 dark:border-gray-700 overflow-hidden z-50 animate-in fade-in slide-in-from-bottom-2 duration-200">
                         <button
                           className="w-full px-4 py-3 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/50 flex items-center gap-2 transition-colors"
                           onClick={() => {
@@ -2513,6 +2601,18 @@ export default function InputBar() {
                           </svg>
                           上传图片
                         </button>
+                        {appMode === 'agent' && (
+                          <button
+                            className="w-full px-4 py-3 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/50 flex items-center gap-2 transition-colors"
+                            onClick={() => {
+                              setShowMobileUploadMenu(false)
+                              referenceFileInputRef.current?.click()
+                            }}
+                          >
+                            <FileTextIcon className="h-4 w-4" />
+                            上传参考文件
+                          </button>
+                        )}
                       </div>
                     </>
                   )}
@@ -2581,6 +2681,14 @@ export default function InputBar() {
             multiple
             className="hidden"
             onChange={handleFileUpload}
+          />
+          <input
+            ref={referenceFileInputRef}
+            type="file"
+            accept={AGENT_REFERENCE_FILE_ACCEPT}
+            multiple
+            className="hidden"
+            onChange={handleReferenceFileUpload}
           />
           <input
             ref={cameraInputRef}

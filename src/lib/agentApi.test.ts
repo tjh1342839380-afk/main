@@ -269,6 +269,44 @@ describe('callAgentResponsesApi', () => {
     expect(result.outputItems?.[0]).toMatchObject({ type: 'web_search_call', status: 'completed' })
   })
 
+  it('registers the editable presentation tool in hybrid Agent mode', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+      output: [{
+        type: 'message',
+        content: [{ type: 'output_text', text: 'OK' }],
+      }],
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }))
+    const profile = createDefaultOpenAIProfile({
+      apiKey: 'test-key',
+      apiMode: 'responses',
+    })
+
+    await callAgentResponsesApi({
+      settings: { ...DEFAULT_SETTINGS, agentApiConfigMode: 'hybrid' },
+      profile,
+      params: DEFAULT_PARAMS,
+      input: [{ role: 'user', content: [{ type: 'input_text', text: '生成一份 PPT' }] }],
+    })
+
+    const [, init] = fetchMock.mock.calls[0]
+    const body = JSON.parse(String((init as RequestInit).body))
+    const tool = body.tools.find((item: { name?: string }) => item.name === 'generate_presentation')
+    expect(tool).toMatchObject({ type: 'function', name: 'generate_presentation', strict: true })
+    expect(tool.parameters.required).toContain('slides')
+    expect(tool.parameters.properties.slides.items.required).toEqual([
+      'layout',
+      'title',
+      'subtitle',
+      'bullets',
+      'image_ref',
+      'notes',
+    ])
+    expect(body.instructions).toContain('real downloadable presentation')
+  })
+
   it('injects configurable math formatting instructions', async () => {
     const createResponse = () => new Response(JSON.stringify({
       output: [{

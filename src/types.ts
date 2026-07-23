@@ -246,12 +246,49 @@ export interface FavoriteCollection {
 export type AgentMessageRole = 'user' | 'assistant'
 export type AgentRoundStatus = 'running' | 'done' | 'error'
 
+export type AgentPresentationAspectRatio = 'wide' | 'standard'
+export type AgentPresentationTheme = 'light' | 'dark'
+export type AgentPresentationSlideLayout = 'title' | 'section' | 'content' | 'image' | 'split'
+
+export interface AgentPresentationSlide {
+  layout: AgentPresentationSlideLayout
+  title: string
+  subtitle?: string
+  bullets: string[]
+  imageRef?: string
+  notes?: string
+}
+
+export interface AgentPresentationSpec {
+  title: string
+  subtitle?: string
+  fileName: string
+  aspectRatio: AgentPresentationAspectRatio
+  theme: AgentPresentationTheme
+  accentColor: string
+  footer?: string
+  slides: AgentPresentationSlide[]
+}
+
+export interface AgentReferenceFile {
+  id: string
+  name: string
+  mimeType: string
+  size: number
+}
+
+export interface StoredAgentReferenceFile extends AgentReferenceFile {
+  dataUrl: string
+  createdAt: number
+}
+
 export interface AgentMessage {
   id: string
   role: AgentMessageRole
   content: string
   roundId: string
   inputImageIds?: string[]
+  inputFiles?: AgentReferenceFile[]
   maskTargetImageId?: string | null
   maskImageId?: string | null
   outputTaskIds?: string[]
@@ -266,6 +303,7 @@ export interface AgentRound {
   assistantMessageId?: string
   prompt: string
   inputImageIds: string[]
+  inputFiles?: AgentReferenceFile[]
   maskTargetImageId?: string | null
   maskImageId?: string | null
   outputTaskIds: string[]
@@ -425,6 +463,14 @@ export interface ExportData {
   favoriteCollections?: FavoriteCollection[]
   defaultFavoriteCollectionId?: string | null
   agentConversations?: AgentConversation[]
+  /** agentFileId -> 参考文件信息 */
+  agentFileFiles?: Record<string, {
+    path: string
+    name: string
+    mimeType: string
+    size: number
+    createdAt: number
+  }>
   /** imageId → 图片信息 */
   imageFiles?: Record<string, {
     path: string

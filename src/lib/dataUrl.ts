@@ -23,9 +23,9 @@ export function dataUrlToBytes(dataUrl: string): { ext: string; bytes: Uint8Arra
   return { ext, bytes }
 }
 
-export function bytesToDataUrl(bytes: Uint8Array, filePath: string): string {
+export function bytesToDataUrl(bytes: Uint8Array, filePath: string, explicitMimeType?: string): string {
   const ext = filePath.split('.').pop()?.toLowerCase() ?? 'png'
-  const mime = IMAGE_MIME_BY_EXTENSION[ext] ?? 'image/png'
+  const mime = explicitMimeType || IMAGE_MIME_BY_EXTENSION[ext] || 'application/octet-stream'
   return `data:${mime};base64,${bytesToBase64(bytes)}`
 }
 
