@@ -72,6 +72,7 @@ export function buildExportZip(params: BuildExportZipParams) {
 
     const referencedFileIds = new Set(params.agentConversations.flatMap((conversation) => [
       ...conversation.rounds.flatMap((round) => (round.inputFiles ?? []).map((file) => file.id)),
+      ...conversation.rounds.flatMap((round) => (round.outputFiles ?? []).map((file) => file.id)),
       ...conversation.messages.flatMap((message) => (message.inputFiles ?? []).map((file) => file.id)),
     ]))
     for (const file of params.agentFiles ?? []) {

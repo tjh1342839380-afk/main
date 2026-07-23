@@ -662,6 +662,18 @@ describe('custom providers', () => {
     expect(normalizeSettings({ agentMathFormattingPrompt: false }).agentMathFormattingPrompt).toBe(false)
   })
 
+  it('normalizes PPT Master service settings', () => {
+    expect(DEFAULT_SETTINGS.pptMasterApiUrl).toBe('')
+    expect(DEFAULT_SETTINGS.pptMasterApiToken).toBe('')
+    expect(normalizeSettings({
+      pptMasterApiUrl: ' https://ppt.example.com/// ',
+      pptMasterApiToken: 'secret',
+    })).toMatchObject({
+      pptMasterApiUrl: 'https://ppt.example.com///',
+      pptMasterApiToken: 'secret',
+    })
+  })
+
   it('disables prompt rewrite allowance by default', () => {
     expect(DEFAULT_SETTINGS.allowPromptRewrite).toBe(false)
     expect(normalizeSettings({}).allowPromptRewrite).toBe(false)

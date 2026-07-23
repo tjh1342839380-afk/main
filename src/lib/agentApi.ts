@@ -67,6 +67,17 @@ const AGENT_PRESENTATION_INSTRUCTIONS = [
   '- After generate_presentation succeeds, tell the user the editable PPTX is ready to download. Do not output the presentation as a Markdown code block.',
 ].join('\n')
 
+const AGENT_PPT_MASTER_INSTRUCTIONS = [
+  '## PPT Master native template fill',
+  '- Uploaded PPTX templates may include a <ppt_master_analysis> block containing exact file_id, source_slide, slot_id, table_id, and chart_id values.',
+  '- When the user wants to preserve or reuse an uploaded PPTX template, use fill_presentation_template instead of generate_presentation.',
+  '- Select source slides by layout fit, not by original order. You may omit, reorder, or reuse a source_slide.',
+  '- Use only exact identifiers from ppt_master_analysis. Keep replacement text within the described slot capacity and geometry.',
+  '- table_edits must preserve the original row and column count. chart series value counts must match categories.',
+  '- The app validates the plan with PPT Master before creating the file. If validation fails, correct the plan from the returned error and retry.',
+  '- After fill_presentation_template succeeds, tell the user the native editable PPTX is ready to download.',
+].join('\n')
+
 function createAgentInstructions(settings: AppSettings) {
   const maxToolRounds = Number.isFinite(settings.agentMaxToolRounds)
     ? Math.max(1, Math.trunc(settings.agentMaxToolRounds))
@@ -90,6 +101,7 @@ function createAgentInstructions(settings: AppSettings) {
 
   if (settings.agentMathFormattingPrompt) instructions.push('', AGENT_MATH_FORMATTING_INSTRUCTIONS)
   if (settings.agentApiConfigMode === 'hybrid') instructions.push('', AGENT_PRESENTATION_INSTRUCTIONS)
+  if (settings.pptMasterApiUrl.trim()) instructions.push('', AGENT_PPT_MASTER_INSTRUCTIONS)
 
   return instructions.join('\n')
 }
@@ -259,6 +271,124 @@ function createPresentationFunctionTool() {
   }
 }
 
+function createPptMasterFillFunctionTool() {
+  return {
+    type: 'function',
+    name: 'fill_presentation_template',
+    description: 'Create a native editable PPTX by filling an uploaded PowerPoint template through PPT Master. Use exact ids from the injected ppt_master_analysis block.',
+    parameters: {
+      type: 'object',
+      properties: {
+        template_file_id: {
+          type: 'string',
+          description: 'Exact file_id from ppt_master_analysis for the uploaded PPTX template.',
+        },
+        file_name: {
+          type: 'string',
+          description: 'Output file name ending in .pptx.',
+        },
+        slides: {
+          type: 'array',
+          minItems: 1,
+          maxItems: 60,
+          description: 'Output slides in final display order. A source slide may be reused.',
+          items: {
+            type: 'object',
+            properties: {
+              source_slide: { type: 'integer', minimum: 1 },
+              purpose: { type: 'string' },
+              layout_pattern: { type: 'string' },
+              why_fit: { type: 'string' },
+              risk: { type: 'string' },
+              notes: { type: ['string', 'null'] },
+              transition: {
+                type: ['string', 'null'],
+                enum: ['fade', 'push', 'wipe', 'split', 'strips', 'cover', 'random', 'none', 'keep', null],
+              },
+              replacements: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    slot_id: { type: 'string' },
+                    text: { type: 'string' },
+                  },
+                  required: ['slot_id', 'text'],
+                  additionalProperties: false,
+                },
+              },
+              table_edits: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    table_id: { type: 'string' },
+                    cells: {
+                      type: 'array',
+                      items: {
+                        type: 'object',
+                        properties: {
+                          row: { type: 'integer', minimum: 0 },
+                          col: { type: 'integer', minimum: 0 },
+                          text: { type: 'string' },
+                        },
+                        required: ['row', 'col', 'text'],
+                        additionalProperties: false,
+                      },
+                    },
+                  },
+                  required: ['table_id', 'cells'],
+                  additionalProperties: false,
+                },
+              },
+              chart_edits: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    chart_id: { type: 'string' },
+                    categories: { type: 'array', items: { type: 'string' } },
+                    series: {
+                      type: 'array',
+                      items: {
+                        type: 'object',
+                        properties: {
+                          name: { type: 'string' },
+                          values: { type: 'array', items: { type: 'number' } },
+                        },
+                        required: ['name', 'values'],
+                        additionalProperties: false,
+                      },
+                    },
+                  },
+                  required: ['chart_id', 'categories', 'series'],
+                  additionalProperties: false,
+                },
+              },
+            },
+            required: [
+              'source_slide',
+              'purpose',
+              'layout_pattern',
+              'why_fit',
+              'risk',
+              'notes',
+              'transition',
+              'replacements',
+              'table_edits',
+              'chart_edits',
+            ],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: ['template_file_id', 'file_name', 'slides'],
+      additionalProperties: false,
+    },
+    strict: true,
+  }
+}
+
 function createAgentTools(params: TaskParams, profile: ApiProfile, settings: AppSettings, maskDataUrl?: string): Array<Record<string, unknown>> {
   const tools: Array<Record<string, unknown>> = settings.agentApiConfigMode === 'hybrid'
     ? [createGenerateImageFunctionTool()]
@@ -310,6 +440,9 @@ function createAgentTools(params: TaskParams, profile: ApiProfile, settings: App
 
   if (settings.agentApiConfigMode === 'hybrid') {
     tools.push(createPresentationFunctionTool())
+  }
+  if (settings.pptMasterApiUrl.trim()) {
+    tools.push(createPptMasterFillFunctionTool())
   }
 
   // continue_generation: model calls this to request another round (e.g. after generating a prerequisite image)

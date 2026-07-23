@@ -46,6 +46,12 @@ describe('exportZip', () => {
       dataUrl: 'data:application/vnd.openxmlformats-officedocument.presentationml.presentation;base64,UEsDBA==',
       createdAt: 1700000000300,
     }
+    const agentOutputFile: StoredAgentReferenceFile = {
+      ...agentFile,
+      id: 'agent-output-1',
+      name: '生成结果.pptx',
+      createdAt: 1700000000400,
+    }
 
     const { manifest, bytes } = buildExportZip({
       options: { exportConfig: true, exportTasks: true },
@@ -70,6 +76,7 @@ describe('exportZip', () => {
           prompt: '生成 PPT',
           inputImageIds: [],
           inputFiles: [{ id: agentFile.id, name: agentFile.name, mimeType: agentFile.mimeType, size: agentFile.size }],
+          outputFiles: [{ id: agentOutputFile.id, name: agentOutputFile.name, mimeType: agentOutputFile.mimeType, size: agentOutputFile.size }],
           outputTaskIds: [],
           status: 'done',
           error: null,
@@ -78,7 +85,7 @@ describe('exportZip', () => {
         }],
         messages: [{ id: 'message-1', role: 'user', content: '生成 PPT', roundId: 'round-1', createdAt: 1700000000000 }],
       }],
-      agentFiles: [agentFile],
+      agentFiles: [agentFile, agentOutputFile],
     })
     const parsed = readExportZip(bytes)
 
@@ -105,6 +112,7 @@ describe('exportZip', () => {
     expect(readExportZipFileAsDataUrl(parsed.files, 'images/task-task-1-partial.png')).toBe(images[2].dataUrl)
     expect(readExportZipFileAsDataUrl(parsed.files, 'thumbnails/task-task-1-input.jpeg')).toBe(thumbnail.thumbnailDataUrl)
     expect(parsed.manifest.agentFileFiles?.[agentFile.id]?.name).toBe(agentFile.name)
+    expect(parsed.manifest.agentFileFiles?.[agentOutputFile.id]?.name).toBe(agentOutputFile.name)
     expect(readExportZipFileAsDataUrl(
       parsed.files,
       parsed.manifest.agentFileFiles![agentFile.id].path,

@@ -6,3 +6,6 @@ debug/
 public/page-background.mp4
 public/wallpapers/dynamic/page-background.mp4
 .wrangler/
+__pycache__/
+*.pyc
+.venv/

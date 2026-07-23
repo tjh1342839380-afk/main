@@ -64,6 +64,7 @@ import { formatExportFileTime } from './lib/exportFileName'
 import { buildExportZip, readExportZip, readExportZipFileAsDataUrl } from './lib/exportZip'
 import { downloadAgentPresentation as downloadPresentationFile, getAgentPresentationImageRefs, parseAgentPresentationCallArguments } from './lib/presentation'
 import { AGENT_REFERENCE_FILE_MAX_BYTES, getAgentReferenceFileMimeType, validateAgentReferenceFiles } from './lib/agentFiles'
+import { analyzePptxWithPptMaster, createPptMasterFillPlan, downloadPptxDataUrl, fillPptxWithPptMaster, formatPptMasterAnalysisContext, isPptxFile, normalizePptMasterApiUrl, parsePptMasterFillCallArguments } from './lib/pptMasterApi'
 
 export const ALL_FAVORITES_COLLECTION_ID = '__all_favorites__'
 export const DEFAULT_FAVORITE_COLLECTION_ID = '__default_favorites__'
@@ -445,6 +446,7 @@ function normalizeAgentRound(value: unknown, fallbackIndex: number): AgentRound 
     prompt: typeof round.prompt === 'string' ? round.prompt : '',
     inputImageIds: normalizeStringArray(round.inputImageIds),
     inputFiles: normalizeAgentReferenceFiles(round.inputFiles),
+    outputFiles: normalizeAgentReferenceFiles(round.outputFiles),
     maskTargetImageId: typeof round.maskTargetImageId === 'string' ? round.maskTargetImageId : null,
     maskImageId: typeof round.maskImageId === 'string' ? round.maskImageId : null,
     outputTaskIds: normalizeStringArray(round.outputTaskIds),
@@ -1005,7 +1007,10 @@ function isAgentFileReferencedByState(state: AppState, fileId: string) {
   if (state.galleryInputDraft?.inputFiles.some((file) => file.id === fileId)) return true
   if (Object.values(state.agentInputDrafts).some((draft) => draft.inputFiles.some((file) => file.id === fileId))) return true
   return state.agentConversations.some((conversation) =>
-    conversation.rounds.some((round) => round.inputFiles?.some((file) => file.id === fileId)) ||
+    conversation.rounds.some((round) =>
+      round.inputFiles?.some((file) => file.id === fileId) ||
+      round.outputFiles?.some((file) => file.id === fileId),
+    ) ||
     conversation.messages.some((message) => message.inputFiles?.some((file) => file.id === fileId)),
   )
 }
@@ -1562,6 +1567,7 @@ export const useStore = create<AppState>()(
         const draft = get().agentInputDrafts[id]
         const fileIds = [
           ...(conversation?.rounds.flatMap((round) => round.inputFiles ?? []) ?? []),
+          ...(conversation?.rounds.flatMap((round) => round.outputFiles ?? []) ?? []),
           ...(conversation?.messages.flatMap((message) => message.inputFiles ?? []) ?? []),
           ...(draft?.inputFiles ?? []),
         ].map((file) => file.id)
@@ -2829,6 +2835,16 @@ async function resolveAgentReferenceImage(conversationId: string, roundId: strin
   return null
 }
 
+async function resolveAgentReferenceFile(conversationId: string, roundId: string, fileId: string) {
+  const conversation = useStore.getState().agentConversations.find((item) => item.id === conversationId)
+  if (!conversation) return null
+  const referenced = getAgentRoundPath(conversation, roundId).some((round) =>
+    [...(round.inputFiles ?? []), ...(round.outputFiles ?? [])].some((file) => file.id === fileId),
+  )
+  if (!referenced) return null
+  return getAgentReferenceFile(fileId)
+}
+
 export async function downloadAgentPresentationFile(conversationId: string, roundId: string, spec: AgentPresentationSpec) {
   const imagesByRef: Record<string, string> = {}
   for (const refId of getAgentPresentationImageRefs(spec)) {
@@ -2836,6 +2852,12 @@ export async function downloadAgentPresentationFile(conversationId: string, roun
     if (image?.dataUrl) imagesByRef[refId] = image.dataUrl
   }
   await downloadPresentationFile(spec, imagesByRef)
+}
+
+export async function downloadAgentOutputFile(fileId: string, fileName: string) {
+  const stored = await getAgentReferenceFile(fileId)
+  if (!stored?.dataUrl) throw new Error('PPTX 文件已不存在，请重新生成')
+  downloadPptxDataUrl(stored.dataUrl, fileName || stored.name)
 }
 
 export function getActiveAgentRounds(conversation: AgentConversation): AgentRound[] {
@@ -3048,24 +3070,67 @@ async function readAgentImageDataUrls(ids: string[]) {
   return dataUrls
 }
 
-async function createAgentUserInputItem(conversation: AgentConversation, round: AgentRound, message: AgentMessage, tasks: TaskRecord[]) {
+async function createAgentUserInputItem(
+  conversation: AgentConversation,
+  round: AgentRound,
+  message: AgentMessage,
+  tasks: TaskRecord[],
+  settings: AppSettings,
+  signal?: AbortSignal,
+) {
   const imageDataUrls = await readAgentImageDataUrls(round.inputImageIds)
   const inputFiles = round.inputFiles ?? message.inputFiles ?? []
   const fileParts: Array<{ type: 'input_file'; filename: string; file_data: string }> = []
+  const pptMasterContexts: string[] = []
+  let pptMasterApiUrl = ''
+  try {
+    pptMasterApiUrl = normalizePptMasterApiUrl(settings.pptMasterApiUrl)
+  } catch (err) {
+    console.warn('PPT Master 服务地址无效，已跳过模板分析', err)
+  }
   for (const file of inputFiles) {
     const stored = await getAgentReferenceFile(file.id)
     if (!stored?.dataUrl) throw new Error(`参考文件“${file.name}”已不存在，请重新上传`)
     fileParts.push({ type: 'input_file', filename: file.name, file_data: stored.dataUrl })
+    if (!pptMasterApiUrl || !isPptxFile(file)) continue
+
+    let analysis = stored.pptMasterAnalysis?.apiUrl === pptMasterApiUrl
+      ? stored.pptMasterAnalysis
+      : undefined
+    if (!analysis) {
+      try {
+        const result = await analyzePptxWithPptMaster({
+          apiUrl: pptMasterApiUrl,
+          token: settings.pptMasterApiToken,
+          fileName: file.name,
+          dataUrl: stored.dataUrl,
+          signal,
+        })
+        analysis = {
+          apiUrl: pptMasterApiUrl,
+          serviceVersion: result.pptMasterVersion,
+          analyzedAt: Date.now(),
+          slideCount: result.slideCount,
+          text: result.text,
+        }
+        await putAgentReferenceFile({ ...stored, pptMasterAnalysis: analysis })
+      } catch (err) {
+        if (signal?.aborted) throw createAgentAbortError()
+        console.warn(`PPT Master 无法分析参考文件“${file.name}”，已回退为普通文件`, err)
+      }
+    }
+    if (analysis) pptMasterContexts.push(formatPptMasterAnalysisContext(file, analysis))
   }
   const rounds = getAgentRoundPath(conversation, round.id)
   const text = replaceAgentPromptImageReferencesForApi(message.content, round, rounds, tasks)
   const referenceText = round.inputImageIds.length > 0
     ? `\n\n<available_refs>${round.inputImageIds.map((_, index) => `\n  <ref id="${getAgentCurrentReferenceId(round, index)}" />`).join('')}\n</available_refs>`
     : ''
+  const pptMasterText = pptMasterContexts.length > 0 ? `\n\n${pptMasterContexts.join('\n\n')}` : ''
   return {
     role: 'user',
     content: [
-      { type: 'input_text', text: `${text}${referenceText}` },
+      { type: 'input_text', text: `${text}${referenceText}${pptMasterText}` },
       ...fileParts,
       ...imageDataUrls.map((dataUrl) => ({ type: 'input_image', image_url: dataUrl })),
     ],
@@ -3343,7 +3408,13 @@ function getAgentRoundResponseOutput(round: AgentRound, tasks: TaskRecord[]): Re
   return null
 }
 
-async function buildAgentApiInput(conversation: AgentConversation, currentRound: AgentRound, tasks: TaskRecord[]): Promise<unknown[]> {
+async function buildAgentApiInput(
+  conversation: AgentConversation,
+  currentRound: AgentRound,
+  tasks: TaskRecord[],
+  settings: AppSettings,
+  signal?: AbortSignal,
+): Promise<unknown[]> {
   const input: unknown[] = []
   const rounds = getAgentRoundPath(conversation, currentRound.id)
   const totalFileBytes = rounds.reduce(
@@ -3358,7 +3429,7 @@ async function buildAgentApiInput(conversation: AgentConversation, currentRound:
     const userMessage = conversation.messages.find((message) => message.id === round.userMessageId)
     if (!userMessage) continue
 
-    input.push(await createAgentUserInputItem(conversation, round, userMessage, tasks))
+    input.push(await createAgentUserInputItem(conversation, round, userMessage, tasks, settings, signal))
     if (round.id === currentRound.id) continue
 
     const output = getAgentRoundResponseOutput(round, tasks)
@@ -3550,6 +3621,7 @@ export async function submitAgentMessage() {
   for (const file of editingRound?.inputFiles ?? []) {
     if (!inputFiles.some((item) => item.id === file.id)) void deleteAgentFileIfUnreferenced(file.id)
   }
+  for (const file of editingRound?.outputFiles ?? []) void deleteAgentFileIfUnreferenced(file.id)
 
   if (fallbackTitle) {
     void generateAgentConversationTitle(conversation.id, trimmedPrompt, inputImageIds, requestSettings, activeProfile, fallbackTitle)
@@ -3691,7 +3763,7 @@ async function executeAgentRound(
     const maskDataUrl = round.maskImageId ? await ensureImageCached(round.maskImageId) : undefined
     if (round.maskImageId && !maskDataUrl) throw new Error('遮罩图片已不存在')
 
-    const apiInput = await buildAgentApiInput(conversation, round, latestState.tasks)
+    const apiInput = await buildAgentApiInput(conversation, round, latestState.tasks, requestSettings, controller.signal)
     if (controller.signal.aborted) throw createAgentAbortError()
     const existingAssistantMessage = round.assistantMessageId
       ? conversation.messages.find((message) => message.id === round.assistantMessageId) ?? null
@@ -4117,6 +4189,64 @@ async function executeAgentRound(
       })
     }
 
+    const executePptMasterFillFunctionCall = async (functionCallItem: ResponsesOutputItem): Promise<string> => {
+      const spec = parsePptMasterFillCallArguments(functionCallItem.arguments ?? '')
+      if (!spec) return JSON.stringify({ status: 'error', error: 'Invalid PPT Master fill arguments' })
+      const template = await resolveAgentReferenceFile(conversationId, roundId, spec.templateFileId)
+      if (!template?.dataUrl || !isPptxFile(template)) {
+        return JSON.stringify({ status: 'error', error: 'PPTX 模板文件不存在，请重新上传' })
+      }
+
+      try {
+        const result = await fillPptxWithPptMaster({
+          apiUrl: requestSettings.pptMasterApiUrl,
+          token: requestSettings.pptMasterApiToken,
+          fileName: template.name,
+          dataUrl: template.dataUrl,
+          outputName: spec.fileName,
+          plan: createPptMasterFillPlan(spec, template.name),
+          signal: controller.signal,
+        })
+        if (controller.signal.aborted) throw createAgentAbortError()
+        const outputFile: AgentReferenceFile = {
+          id: `agent-output-${genId()}`,
+          name: spec.fileName,
+          mimeType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+          size: result.size,
+        }
+        await putAgentReferenceFile({
+          ...outputFile,
+          dataUrl: result.dataUrl,
+          createdAt: Date.now(),
+        })
+        updateAgentConversation(conversationId, (current) => ({
+          ...current,
+          updatedAt: Date.now(),
+          rounds: current.rounds.map((item) => item.id === roundId
+            ? {
+                ...item,
+                outputFiles: [...(item.outputFiles ?? []).filter((file) => file.id !== outputFile.id), outputFile],
+              }
+            : item),
+        }))
+        toolCallsUsed += 1
+        return JSON.stringify({
+          status: 'ready',
+          file_id: outputFile.id,
+          file_name: outputFile.name,
+          slide_count: spec.slides.length,
+          engine: `PPT Master ${result.serviceVersion}`,
+        })
+      } catch (err) {
+        if (controller.signal.aborted) throw createAgentAbortError()
+        console.error('PPT Master 模板填充失败', err)
+        return JSON.stringify({
+          status: 'error',
+          error: err instanceof Error ? err.message : 'PPT Master 模板填充失败',
+        })
+      }
+    }
+
     while (true) {
       if (controller.signal.aborted) throw createAgentAbortError()
       const textBeforeResponse = accumulatedText
@@ -4276,6 +4406,9 @@ async function executeAgentRound(
       const presentationFunctionCalls = currentResponseOutputItems.filter(
         (item) => item.type === 'function_call' && item.name === 'generate_presentation',
       )
+      const pptMasterFunctionCalls = currentResponseOutputItems.filter(
+        (item) => item.type === 'function_call' && item.name === 'fill_presentation_template',
+      )
       const continueFunctionCalls = currentResponseOutputItems.filter(
         (item) => item.type === 'function_call' && item.name === 'continue_generation',
       )
@@ -4314,6 +4447,14 @@ async function executeAgentRound(
           type: 'function_call_output',
           call_id: fc.call_id,
           output: await executePresentationFunctionCall(fc),
+        })
+      }
+
+      for (const fc of pptMasterFunctionCalls) {
+        functionCallOutputs.push({
+          type: 'function_call_output',
+          call_id: fc.call_id,
+          output: await executePptMasterFillFunctionCall(fc),
         })
       }
 

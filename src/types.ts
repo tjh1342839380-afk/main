@@ -113,6 +113,8 @@ export interface AppSettings {
   agentApiConfigMode: AgentApiConfigMode
   agentTextProfileId?: string | null
   agentImageProfileId?: string | null
+  pptMasterApiUrl: string
+  pptMasterApiToken: string
   profiles: ApiProfile[]
   activeProfileId: string
 }
@@ -270,6 +272,41 @@ export interface AgentPresentationSpec {
   slides: AgentPresentationSlide[]
 }
 
+export interface PptMasterFillReplacement {
+  slotId: string
+  text: string
+}
+
+export interface PptMasterFillTableEdit {
+  tableId: string
+  cells: Array<{ row: number; col: number; text: string }>
+}
+
+export interface PptMasterFillChartEdit {
+  chartId: string
+  categories: string[]
+  series: Array<{ name: string; values: number[] }>
+}
+
+export interface PptMasterFillSlide {
+  sourceSlide: number
+  purpose: string
+  layoutPattern: string
+  whyFit: string
+  risk: string
+  notes?: string
+  transition?: string
+  replacements: PptMasterFillReplacement[]
+  tableEdits: PptMasterFillTableEdit[]
+  chartEdits: PptMasterFillChartEdit[]
+}
+
+export interface PptMasterFillSpec {
+  templateFileId: string
+  fileName: string
+  slides: PptMasterFillSlide[]
+}
+
 export interface AgentReferenceFile {
   id: string
   name: string
@@ -280,6 +317,13 @@ export interface AgentReferenceFile {
 export interface StoredAgentReferenceFile extends AgentReferenceFile {
   dataUrl: string
   createdAt: number
+  pptMasterAnalysis?: {
+    apiUrl: string
+    serviceVersion: string
+    analyzedAt: number
+    slideCount: number
+    text: string
+  }
 }
 
 export interface AgentMessage {
@@ -304,6 +348,7 @@ export interface AgentRound {
   prompt: string
   inputImageIds: string[]
   inputFiles?: AgentReferenceFile[]
+  outputFiles?: AgentReferenceFile[]
   maskTargetImageId?: string | null
   maskImageId?: string | null
   outputTaskIds: string[]

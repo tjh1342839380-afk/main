@@ -567,6 +567,8 @@ export function normalizeSettings(input: Partial<AppSettings> | unknown): AppSet
     agentApiConfigMode,
     agentTextProfileId,
     agentImageProfileId,
+    pptMasterApiUrl: typeof record.pptMasterApiUrl === 'string' ? record.pptMasterApiUrl.trim() : '',
+    pptMasterApiToken: typeof record.pptMasterApiToken === 'string' ? record.pptMasterApiToken : '',
     profiles,
     activeProfileId,
   }
@@ -875,4 +877,6 @@ export const DEFAULT_SETTINGS: AppSettings = normalizeSettings({
   agentApiConfigMode: 'off',
   agentTextProfileId: null,
   agentImageProfileId: null,
+  pptMasterApiUrl: '',
+  pptMasterApiToken: '',
 })

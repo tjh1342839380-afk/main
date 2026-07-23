@@ -1,3 +1,5 @@
+import { useState } from 'react'
+
 import {
   DEFAULT_AGENT_MAX_TOOL_ROUNDS,
   type AgentApiConfigMode,
@@ -5,6 +7,8 @@ import {
   type AppSettings,
 } from '../../types'
 import { normalizeAgentMaxToolRounds } from '../../lib/apiProfiles'
+import { checkPptMasterHealth } from '../../lib/pptMasterApi'
+import { RefreshIcon } from '../icons'
 import Select from '../Select'
 
 interface SelectOption {
@@ -37,6 +41,25 @@ export default function AgentSettingsTab({
   commitSettings,
   commitAgentMaxToolRounds,
 }: AgentSettingsTabProps) {
+  const [pptMasterConnection, setPptMasterConnection] = useState<{
+    status: 'idle' | 'testing' | 'success' | 'error'
+    message: string
+  }>({ status: 'idle', message: '' })
+
+  const testPptMasterConnection = async () => {
+    if (pptMasterConnection.status === 'testing') return
+    setPptMasterConnection({ status: 'testing', message: '正在连接...' })
+    try {
+      const result = await checkPptMasterHealth(draft.pptMasterApiUrl, draft.pptMasterApiToken)
+      setPptMasterConnection({ status: 'success', message: `连接成功 · ${result.pptMasterVersion}` })
+    } catch (err) {
+      setPptMasterConnection({
+        status: 'error',
+        message: err instanceof Error ? err.message : '连接失败',
+      })
+    }
+  }
+
   return (
     <div className="space-y-4">
       <div className="block">
@@ -106,6 +129,62 @@ export default function AgentSettingsTab({
           )}
         </>
       )}
+      <div className="border-t border-gray-200/70 pt-4 dark:border-white/[0.08]">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="text-sm font-medium text-gray-700 dark:text-gray-200">PPT Master 服务</div>
+            <div data-selectable-text className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-500">
+              配置后会分析上传的 PPTX 模板，并生成保留原生版式、文本框、表格和图表的可编辑文件。
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => void testPptMasterConnection()}
+            disabled={!draft.pptMasterApiUrl.trim() || pptMasterConnection.status === 'testing'}
+            className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-gray-200 bg-white px-2.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-45 dark:border-white/[0.1] dark:bg-white/[0.04] dark:text-gray-200 dark:hover:bg-white/[0.08]"
+          >
+            <RefreshIcon className={`h-3.5 w-3.5 ${pptMasterConnection.status === 'testing' ? 'animate-spin' : ''}`} />
+            测试连接
+          </button>
+        </div>
+        <div className="space-y-3">
+          <label className="block">
+            <span className="mb-1.5 block text-xs text-gray-500 dark:text-gray-400">服务地址</span>
+            <input
+              value={draft.pptMasterApiUrl}
+              onChange={(e) => {
+                setPptMasterConnection({ status: 'idle', message: '' })
+                commitSettings({ ...draft, pptMasterApiUrl: e.target.value })
+              }}
+              type="url"
+              inputMode="url"
+              autoComplete="url"
+              placeholder="https://ppt-worker.example.com"
+              className="w-full rounded-lg border border-gray-200/70 bg-white/60 px-3 py-2.5 text-sm text-gray-700 outline-none transition placeholder:text-gray-400 focus:border-blue-300 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-gray-200 dark:placeholder:text-gray-600 dark:focus:border-blue-500/50"
+            />
+          </label>
+          <label className="block">
+            <span className="mb-1.5 block text-xs text-gray-500 dark:text-gray-400">访问令牌（可选）</span>
+            <input
+              value={draft.pptMasterApiToken}
+              onChange={(e) => {
+                setPptMasterConnection({ status: 'idle', message: '' })
+                commitSettings({ ...draft, pptMasterApiToken: e.target.value })
+              }}
+              type="password"
+              autoComplete="off"
+              placeholder="Bearer Token"
+              className="w-full rounded-lg border border-gray-200/70 bg-white/60 px-3 py-2.5 text-sm text-gray-700 outline-none transition placeholder:text-gray-400 focus:border-blue-300 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-gray-200 dark:placeholder:text-gray-600 dark:focus:border-blue-500/50"
+            />
+          </label>
+          {pptMasterConnection.status !== 'idle' && (
+            <div className={`flex items-center gap-2 text-xs ${pptMasterConnection.status === 'success' ? 'text-emerald-600 dark:text-emerald-400' : pptMasterConnection.status === 'error' ? 'text-red-600 dark:text-red-400' : 'text-gray-500 dark:text-gray-400'}`}>
+              <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${pptMasterConnection.status === 'success' ? 'bg-emerald-500' : pptMasterConnection.status === 'error' ? 'bg-red-500' : 'animate-pulse bg-blue-500'}`} />
+              <span className="break-all">{pptMasterConnection.message}</span>
+            </div>
+          )}
+        </div>
+      </div>
       <label className="block">
         <span className="mb-1.5 block text-sm text-gray-600 dark:text-gray-300">最大工具调用轮数</span>
         <input
