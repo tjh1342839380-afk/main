@@ -1,13 +1,12 @@
 import { useEffect, useLayoutEffect, useMemo, useState, useRef, useCallback, type CSSProperties, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from 'react'
-import type { AgentConversation, AgentMessage, AgentPresentationSpec, AgentRound, PptMasterFillSpec, ResponsesOutputItem, TaskRecord } from '../types'
-import { deleteAgentFileIfUnreferenced, deleteAgentRoundFromConversation, downloadAgentOutputFile, downloadAgentPresentationFile, editOutputs, getActiveAgentRounds, getAgentBranchLeafId, getAgentSiblingRounds, getCachedImage, ensureImageCached, regenerateAgentAssistantMessage, remapAgentRoundMentionsForPathChange, removeMultipleTasks, removeTask, reuseConfig, useStore } from '../store'
+import type { AgentConversation, AgentMessage, AgentPresentationSpec, AgentRound, ResponsesOutputItem, TaskRecord } from '../types'
+import { deleteAgentFileIfUnreferenced, deleteAgentRoundFromConversation, downloadAgentPresentationFile, editOutputs, getActiveAgentRounds, getAgentBranchLeafId, getAgentSiblingRounds, getCachedImage, ensureImageCached, regenerateAgentAssistantMessage, remapAgentRoundMentionsForPathChange, removeMultipleTasks, removeTask, reuseConfig, useStore } from '../store'
 import { getPromptMentionParts } from '../lib/promptImageMentions'
 import { copyTextToClipboard, getClipboardFailureMessage } from '../lib/clipboard'
 import { collectWebSearchCalls, getAgentRoundOutputItems, getWebSearchStatusForCalls, type AgentWebSearchStatus } from '../lib/agentWebSearch'
 import { createMaskPreviewDataUrl } from '../lib/canvasImage'
 import { downloadImageEntriesAsZip, downloadImageIds, getImageZipEntries } from '../lib/downloadImages'
 import { parseAgentPresentationCallArguments } from '../lib/presentation'
-import { parsePptMasterFillCallArguments } from '../lib/pptMasterApi'
 import { formatAgentReferenceFileSize, getAgentReferenceFileExtension } from '../lib/agentFiles'
 import TaskCard from './TaskCard'
 import MarkdownRenderer from './MarkdownRenderer'
@@ -117,10 +116,6 @@ function getAgentPresentationStatus(outputItems: ResponsesOutputItem[], callId: 
   status: AgentPresentationStatus
   error?: string
   missingImageRefs: string[]
-  fileId?: string
-  fileName?: string
-  slideCount?: number
-  engine?: string
 } {
   const output = outputItems.find((item) => item.type === 'function_call_output' && item.call_id === callId)?.output
   if (!output) {
@@ -136,10 +131,6 @@ function getAgentPresentationStatus(outputItems: ResponsesOutputItem[], callId: 
       status?: unknown
       error?: unknown
       missing_image_refs?: unknown
-      file_id?: unknown
-      file_name?: unknown
-      slide_count?: unknown
-      engine?: unknown
     }
     const missingImageRefs = Array.isArray(parsed.missing_image_refs)
       ? parsed.missing_image_refs.filter((item): item is string => typeof item === 'string')
@@ -148,10 +139,6 @@ function getAgentPresentationStatus(outputItems: ResponsesOutputItem[], callId: 
       ? {
           status: 'ready' as const,
           missingImageRefs,
-          fileId: typeof parsed.file_id === 'string' ? parsed.file_id : undefined,
-          fileName: typeof parsed.file_name === 'string' ? parsed.file_name : undefined,
-          slideCount: typeof parsed.slide_count === 'number' ? parsed.slide_count : undefined,
-          engine: typeof parsed.engine === 'string' ? parsed.engine : undefined,
         }
       : { status: 'error' as const, error: typeof parsed.error === 'string' ? parsed.error : 'PPTX 生成失败', missingImageRefs }
   } catch {
@@ -163,7 +150,6 @@ function AgentPresentationCard({
   fileName,
   slideCount,
   aspectRatio,
-  engine,
   status,
   error,
   missingImageRefs,
@@ -172,7 +158,6 @@ function AgentPresentationCard({
   fileName: string
   slideCount?: number
   aspectRatio?: 'wide' | 'standard'
-  engine?: string
   status: AgentPresentationStatus
   error?: string
   missingImageRefs: string[]
@@ -207,10 +192,8 @@ function AgentPresentationCard({
             {status === 'ready' && (
               <>
                 {slideCount != null && <span>{slideCount} 页</span>}
-                {slideCount != null && (aspectRatio || engine) && <span aria-hidden="true">·</span>}
+                {slideCount != null && aspectRatio && <span aria-hidden="true">·</span>}
                 {aspectRatio && <span>{aspectRatio === 'standard' ? '4:3' : '16:9'}</span>}
-                {aspectRatio && engine && <span aria-hidden="true">·</span>}
-                {engine && <span>{engine}</span>}
                 <span aria-hidden="true">·</span>
                 <span>文字可编辑</span>
               </>
@@ -243,7 +226,6 @@ type AgentAssistantBlock =
   | { type: 'image-task'; task: TaskRecord; key: string }
   | { type: 'deleted-image-task'; taskId: string; key: string }
   | { type: 'presentation'; spec: AgentPresentationSpec | null; status: AgentPresentationStatus; error?: string; missingImageRefs: string[]; callId: string; key: string }
-  | { type: 'ppt-master-presentation'; spec: PptMasterFillSpec | null; status: AgentPresentationStatus; error?: string; fileId?: string; fileName?: string; slideCount?: number; engine?: string; callId: string; key: string }
   | { type: 'text'; key: string; content?: string }
 
 // 定义智能助手轮次任务槽的接口
@@ -341,24 +323,6 @@ function getAgentAssistantBlocks(round: AgentRound | null, taskSlots: AgentRound
         missingImageRefs: result.missingImageRefs,
         callId,
         key: `presentation:${callId}`,
-      })
-      continue
-    }
-
-    if (item.type === 'function_call' && item.name === 'fill_presentation_template') {
-      const callId = item.call_id ?? item.id ?? `ppt-master-${blocks.length}`
-      const result = getAgentPresentationStatus(outputItems, callId, round)
-      blocks.push({
-        type: 'ppt-master-presentation',
-        spec: parsePptMasterFillCallArguments(item.arguments ?? ''),
-        status: result.status,
-        error: result.error,
-        fileId: result.fileId,
-        fileName: result.fileName,
-        slideCount: result.slideCount,
-        engine: result.engine,
-        callId,
-        key: `ppt-master-presentation:${callId}`,
       })
       continue
     }
@@ -1371,29 +1335,6 @@ export default function AgentWorkspace() {
                                       } catch (err) {
                                         console.error(err)
                                         showToast(err instanceof Error ? err.message : 'PPTX 生成失败', 'error')
-                                      }
-                                    }}
-                                  />
-                                )
-                              }
-                              if (block.type === 'ppt-master-presentation') {
-                                return (
-                                  <AgentPresentationCard
-                                    key={block.key}
-                                    fileName={block.fileName || block.spec?.fileName || ''}
-                                    slideCount={block.slideCount ?? block.spec?.slides.length}
-                                    engine={block.engine || 'PPT Master'}
-                                    status={block.status}
-                                    error={block.error}
-                                    missingImageRefs={[]}
-                                    onDownload={async () => {
-                                      if (!block.fileId) return
-                                      try {
-                                        await downloadAgentOutputFile(block.fileId, block.fileName || block.spec?.fileName || 'presentation.pptx')
-                                        showToast('PPTX 下载成功', 'success')
-                                      } catch (err) {
-                                        console.error(err)
-                                        showToast(err instanceof Error ? err.message : 'PPTX 下载失败', 'error')
                                       }
                                     }}
                                   />
