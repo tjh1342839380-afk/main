@@ -14,7 +14,7 @@ VITE_SUB2API_AUTH_PROXY=true
 VITE_SUB2API_AUTO_CONFIGURE=true
 ```
 
-启用 `VITE_SUB2API_AUTH_PROXY` 后，浏览器请求同源 `/sub2api-auth/*`，避免依赖 Sub2API 的跨域配置。登录后如果当前默认 OpenAI 配置还没有 API Key，应用会复用该用户已有的有效 Key；没有可用 Key 时会创建名为 `GPT Image 2 For TJH` 的 Key。
+启用 `VITE_SUB2API_AUTH_PROXY` 后，浏览器请求同源 `/sub2api-auth/*`，避免依赖 Sub2API 的跨域配置。登录后如果当前默认 OpenAI 配置还没有 API Key，应用会复用该用户已有的有效 Key；没有可用 Key 时会创建名为 `OmniMuse` 的 Key。
 
 ## 项目内用户控制台
 

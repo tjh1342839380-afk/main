@@ -359,6 +359,26 @@ describe('sub2apiAuth', () => {
     )
   })
 
+  it('creates an OmniMuse API key when no active key exists', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(jsonResponse({ code: 0, data: { items: [] } }))
+      .mockResolvedValueOnce(jsonResponse({
+        code: 0,
+        data: { id: 3, key: 'sk-new', name: 'OmniMuse', status: 'active' },
+      }))
+
+    await expect(ensureSub2ApiImageKey()).resolves.toBe('sk-new')
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      'https://auth.example.com/api/v1/keys',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ name: 'OmniMuse' }),
+        credentials: 'include',
+      }),
+    )
+  })
+
   it('refreshes an expired access token before loading API keys', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch')
       .mockResolvedValueOnce(jsonResponse({

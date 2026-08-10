@@ -1,3 +1,5 @@
+import { APP_SHORT_NAME } from './brand'
+
 export type Sub2ApiAuthProvider = 'email' | 'linuxdo' | 'oidc' | 'wechat' | 'github' | 'google' | 'dingtalk'
 
 export interface Sub2ApiUserAuthBindingStatus {
@@ -616,7 +618,7 @@ export async function listSub2ApiKeys() {
   return requestWithSessionRefresh<{ items?: Sub2ApiApiKey[] }>('/keys?page=1&page_size=20')
 }
 
-export async function createSub2ApiKey(name = 'GPT Image 2 For TJH') {
+export async function createSub2ApiKey(name = APP_SHORT_NAME) {
   return requestWithSessionRefresh<Sub2ApiApiKey>('/keys', {
     method: 'POST',
     body: JSON.stringify({ name }),

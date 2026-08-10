@@ -14,7 +14,7 @@ import {
   type Sub2ApiTwoFactorInput,
 } from '../lib/sub2apiAuth'
 
-const AUTH_CHANGE_EVENT = 'gpt-image-2-for-tjh:sub2api-auth-change'
+const AUTH_CHANGE_EVENT = 'omni-muse:sub2api-auth-change'
 
 function notifyAuthChange() {
   window.dispatchEvent(new Event(AUTH_CHANGE_EVENT))

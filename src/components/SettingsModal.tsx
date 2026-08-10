@@ -28,6 +28,7 @@ import {
 } from '../lib/apiProfiles'
 import { copyTextToClipboard, getClipboardFailureMessage } from '../lib/clipboard'
 import { requestBrowserNotificationPermission, type BrowserNotificationPermissionResult } from '../lib/browserNotification'
+import { APP_NAME } from '../lib/brand'
 import { DEFAULT_AGENT_MAX_TOOL_ROUNDS, DEFAULT_STREAM_PARTIAL_IMAGES, type AgentApiConfigMode, type ApiProfile, type AppSettings, type CustomProviderDefinition, type ZipDownloadRoute } from '../types'
 import { useCloseOnEscape } from '../hooks/useCloseOnEscape'
 import { usePreventBackgroundScroll } from '../hooks/usePreventBackgroundScroll'
@@ -44,6 +45,7 @@ function newId(prefix: string) {
 }
 
 const ADD_CUSTOM_PROVIDER_VALUE = '__add_custom_provider__'
+// 保留旧品牌存储键，避免升级后丢失复制选项。
 const COPY_IMPORT_URL_OPTIONS_STORAGE_KEY = 'gpt-image-2-for-tjh.copy-import-url-options'
 const LEGACY_COPY_IMPORT_URL_OPTIONS_STORAGE_KEY = 'gpt-image-' + 'playground.copy-import-url-options'
 
@@ -302,7 +304,11 @@ profiles 中不要包含 apiKey（用户导入后自行填写）。
 ## 统一任务接口示例
 {"customProviders":[{"id":"custom-example-task","name":"示例任务服务商","submit":{"path":"images/generations","method":"POST","contentType":"json","body":{"model":"$profile.model","prompt":"$prompt","n":"$params.n","size":"$params.size","resolution":"2k","quality":"$params.quality","image_urls":"$inputImages.dataUrls"},"taskIdPath":"data.0.task_id"},"poll":{"path":"tasks/{task_id}","method":"GET","query":{"language":"zh"},"intervalSeconds":5,"statusPath":"data.status","successValues":["completed"],"failureValues":["failed","cancelled"],"errorPath":"data.error.message","result":{"imageUrlPaths":["data.result.images.*.url.*"],"b64JsonPaths":[]}}}],"profiles":[{"name":"示例任务服务商","provider":"custom-example-task","baseUrl":"","model":"gpt-image-2","apiMode":"images"}]}`
 
-export default function SettingsModal() {
+interface SettingsModalProps {
+  consoleMode?: boolean
+}
+
+export default function SettingsModal({ consoleMode = false }: SettingsModalProps) {
   const showSettings = useStore((s) => s.showSettings)
   const settingsTabRequest = useStore((s) => s.settingsTabRequest)
   const setShowSettings = useStore((s) => s.setShowSettings)
@@ -320,6 +326,7 @@ export default function SettingsModal() {
   const duplicateProfileTooltipTimerRef = useRef<number | null>(null)
   const llmPromptTooltipTimerRef = useRef<number | null>(null)
   const settingsScrollBoundaryRef = useRef<HTMLDivElement>(null)
+  const settingsCloseButtonRef = useRef<HTMLButtonElement>(null)
   const customProviderScrollBoundaryRef = useRef<HTMLDivElement>(null)
   const zipDownloadRouteScrollBoundaryRef = useRef<HTMLDivElement>(null)
   
@@ -708,6 +715,33 @@ export default function SettingsModal() {
     setShowSettings(false)
   }
 
+  const handleSettingsKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== 'Tab') return
+    const panel = settingsScrollBoundaryRef.current
+    if (!panel) return
+
+    const focusable = Array.from(panel.querySelectorAll<HTMLElement>(
+      'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [contenteditable="true"], [tabindex]:not([tabindex="-1"])',
+    )).filter((el) => el.getClientRects().length > 0 && el.getAttribute('aria-hidden') !== 'true')
+
+    if (focusable.length === 0) {
+      event.preventDefault()
+      panel.focus()
+      return
+    }
+
+    const active = document.activeElement
+    const first = focusable[0]
+    const last = focusable[focusable.length - 1]
+    if (event.shiftKey && active === first) {
+      event.preventDefault()
+      last.focus()
+    } else if (!event.shiftKey && active === last) {
+      event.preventDefault()
+      first.focus()
+    }
+  }
+
   const commitTimeout = useCallback(() => {
     if (!isOpenAICompatibleProvider(draft, activeProfile.provider)) return
     const nextTimeout = Number(timeoutInput)
@@ -754,6 +788,17 @@ export default function SettingsModal() {
 
   useCloseOnEscape(showSettings, handleClose)
   usePreventBackgroundScroll(showSettings, showZipDownloadRouteManager ? zipDownloadRouteScrollBoundaryRef : showCustomProviderImport ? customProviderScrollBoundaryRef : settingsScrollBoundaryRef)
+
+  useEffect(() => {
+    if (!showSettings) return
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    const frame = window.requestAnimationFrame(() => settingsCloseButtonRef.current?.focus())
+
+    return () => {
+      window.cancelAnimationFrame(frame)
+      if (previousFocus?.isConnected) previousFocus.focus()
+    }
+  }, [showSettings])
 
   if (!showSettings) return null
 
@@ -1162,18 +1207,23 @@ export default function SettingsModal() {
   }
 
   return (
-        <div data-no-drag-select className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+        <div data-no-drag-select className={`fixed inset-0 z-[70] flex items-center justify-center p-4 ${consoleMode ? 'console-settings-shell' : ''}`}>
       <div
-        className="absolute inset-0 bg-black/30 backdrop-blur-sm animate-overlay-in"
+        className={`absolute inset-0 bg-black/30 backdrop-blur-sm animate-overlay-in ${consoleMode ? 'console-settings-overlay' : ''}`}
         onClick={handleClose}
       />
       <div
         ref={settingsScrollBoundaryRef}
-        className="relative z-10 w-full max-w-3xl rounded-3xl border border-white/50 bg-white/95 shadow-2xl ring-1 ring-black/5 animate-modal-in dark:border-white/[0.08] dark:bg-gray-900/95 dark:ring-white/10 flex h-[85vh] sm:h-[600px] flex-col overflow-hidden"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="settings-modal-title"
+        tabIndex={-1}
+        onKeyDown={handleSettingsKeyDown}
+        className={`relative z-10 w-full max-w-3xl rounded-3xl border border-white/50 bg-white/95 shadow-2xl ring-1 ring-black/5 animate-modal-in dark:border-white/[0.08] dark:bg-gray-900/95 dark:ring-white/10 flex h-[85vh] sm:h-[600px] flex-col overflow-hidden ${consoleMode ? 'console-settings-panel' : ''}`}
       >
         {/* Header */}
         <div className="flex items-center justify-between shrink-0 p-5 border-b border-gray-100 dark:border-white/[0.08]">
-          <h3 className="text-lg font-bold text-gray-800 dark:text-gray-100 flex items-center gap-2">
+          <h3 id="settings-modal-title" className="text-lg font-bold text-gray-800 dark:text-gray-100 flex items-center gap-2">
             <svg className="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -1183,6 +1233,8 @@ export default function SettingsModal() {
           <div className="flex items-center gap-3">
             <span className="text-sm text-gray-400 dark:text-gray-500 font-mono select-none">v{__APP_VERSION__}</span>
             <button
+              ref={settingsCloseButtonRef}
+              type="button"
               onClick={handleClose}
               className="rounded-full p-1 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-white/[0.06] dark:hover:text-gray-200"
               aria-label="关闭"
@@ -1861,7 +1913,7 @@ export default function SettingsModal() {
                   <div className="mb-6 flex h-[92px] w-[92px] items-center justify-center rounded-full border border-white/70 bg-white/55 shadow-[inset_0_1px_0_rgba(255,255,255,0.65),0_14px_42px_rgba(15,23,42,0.08)] backdrop-blur-xl dark:border-white/[0.08] dark:bg-white/[0.05] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_18px_50px_rgba(0,0,0,0.3)]">
                     <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-[20px] bg-white shadow-[0_10px_26px_rgba(15,23,42,0.18)]">
                       <img
-                        src="/brand/gpt-img-2-for-tjh-icon.png"
+                        src="/brand/omni-muse-icon.png"
                         alt=""
                         className="h-full w-full object-cover"
                         draggable={false}
@@ -1871,10 +1923,10 @@ export default function SettingsModal() {
                   </div>
 
                   <h4 className="text-[19px] font-bold tracking-normal text-gray-800 dark:text-gray-100">
-                    GPT Image 2 For TJH
+                    {APP_NAME}
                   </h4>
                   <p className="mt-3 text-[13px] leading-relaxed text-gray-500 dark:text-gray-400">
-                    TJH 专属图像生成工作台
+                    多模态 AI 创作与 Agent 对话工作台
                   </p>
                   <div className="mt-7 rounded-full border border-gray-200/70 bg-white/50 px-3 py-1.5 text-[11px] font-medium text-gray-500 shadow-sm backdrop-blur dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-gray-400">
                     Version 0.6.10
@@ -1901,7 +1953,7 @@ export default function SettingsModal() {
         {showZipDownloadRouteManager && createPortal(
           <div
             data-no-drag-select
-            className="fixed inset-0 z-[110] flex items-center justify-center p-4"
+            className={`fixed inset-0 z-[110] flex items-center justify-center p-4 ${consoleMode ? 'console-settings-shell' : ''}`}
             onClick={() => setShowZipDownloadRouteManager(false)}
           >
             <div className="absolute inset-0 bg-black/20 dark:bg-black/40 backdrop-blur-md animate-overlay-in" />
@@ -1974,7 +2026,7 @@ export default function SettingsModal() {
         )}
 
         {showCustomProviderImport && createPortal(
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className={`fixed inset-0 z-[100] flex items-center justify-center p-4 ${consoleMode ? 'console-settings-shell' : ''}`}>
             <div className="absolute inset-0 bg-black/30 backdrop-blur-sm animate-overlay-in" onClick={() => {
               setShowCustomProviderImport(false)
               setEditingCustomProviderId(null)
@@ -2101,20 +2153,24 @@ export default function SettingsModal() {
           , document.body)}
         {profileTouchDragPreview && createPortal(
           <div
-            className="fixed pointer-events-none z-[110] flex items-center justify-between gap-2 rounded-xl bg-white/95 px-3 py-2 text-xs text-gray-700 shadow-xl ring-1 ring-black/5 backdrop-blur-xl dark:bg-gray-900/95 dark:text-gray-300 dark:ring-white/10"
+            className={`fixed pointer-events-none z-[110] ${consoleMode ? 'console-settings-shell' : ''}`}
             style={{
               left: profileTouchDragPreview.x - profileTouchDragPreview.offsetX,
               top: profileTouchDragPreview.y - profileTouchDragPreview.offsetY,
               width: profileTouchDragPreview.width,
-              minHeight: profileTouchDragPreview.height,
             }}
           >
-            <div className="flex min-w-0 flex-1 items-center gap-2 pr-2">
-              <DragHandleIcon className="h-3.5 w-3.5 shrink-0 text-gray-400 dark:text-gray-500" />
-              <span className="min-w-0 truncate">{profileTouchDragPreview.label}</span>
-              <span className="shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-500 dark:bg-white/[0.08] dark:text-gray-400">
-                {profileTouchDragPreview.providerLabel}
-              </span>
+            <div
+              className="flex items-center justify-between gap-2 rounded-xl bg-white/95 px-3 py-2 text-xs text-gray-700 shadow-xl ring-1 ring-black/5 backdrop-blur-xl dark:bg-gray-900/95 dark:text-gray-300 dark:ring-white/10"
+              style={{ minHeight: profileTouchDragPreview.height }}
+            >
+              <div className="flex min-w-0 flex-1 items-center gap-2 pr-2">
+                <DragHandleIcon className="h-3.5 w-3.5 shrink-0 text-gray-400 dark:text-gray-500" />
+                <span className="min-w-0 truncate">{profileTouchDragPreview.label}</span>
+                <span className="shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-500 dark:bg-white/[0.08] dark:text-gray-400">
+                  {profileTouchDragPreview.providerLabel}
+                </span>
+              </div>
             </div>
           </div>,
           document.body,
@@ -2122,7 +2178,7 @@ export default function SettingsModal() {
         {copyImportUrlProfile && createPortal(
           <div
             data-no-drag-select
-            className="fixed inset-0 z-[110] flex items-center justify-center p-4"
+            className={`fixed inset-0 z-[110] flex items-center justify-center p-4 ${consoleMode ? 'console-settings-shell' : ''}`}
             onClick={() => setCopyImportUrlProfile(null)}
           >
             <div className="absolute inset-0 bg-black/20 dark:bg-black/40 backdrop-blur-md animate-overlay-in" />

@@ -195,7 +195,7 @@ export default function LandingAuthModal({ mode, onModeChange, onClose }: Landin
         </button>
 
         <div className="landing-auth-emblem">
-          <img src="/brand/gpt-img-2-for-tjh-icon.png" alt="" aria-hidden="true" />
+          <img src="/brand/omni-muse-icon.png" alt="" aria-hidden="true" />
         </div>
 
         <div className="landing-auth-title">

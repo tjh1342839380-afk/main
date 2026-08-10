@@ -1,5 +1,6 @@
 import type { AgentConversation, StoredAgentReferenceFile, TaskRecord, StoredImage, StoredImageThumbnail } from '../types'
 
+// 保留旧数据库名称，避免升级后无法读取历史任务和图片。
 const DB_NAME = 'gpt-image-2-for-tjh'
 const LEGACY_DB_NAME = 'gpt-image-' + 'playground'
 const LEGACY_DB_MIGRATION_STORAGE_KEY = 'gpt-image-2-for-tjh:indexeddb-migrated'

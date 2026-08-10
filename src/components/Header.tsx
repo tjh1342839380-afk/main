@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { useStore } from '../store'
 import { useTooltip } from '../hooks/useTooltip'
+import { APP_NAME } from '../lib/brand'
 import { dismissAllTooltips } from '../lib/tooltipDismiss'
 import ViewportTooltip from './ViewportTooltip'
 import HelpModal from './HelpModal'
@@ -250,14 +251,14 @@ export default function Header({ dynamicBackgroundEnabled, onToggleDynamicBackgr
                   <span
                     className="hidden text-lg font-bold tracking-tight text-gray-800 dark:text-gray-100 sm:inline"
                   >
-                    GPT Image 2 For TJH
+                    {APP_NAME}
                   </span>
                 </>
               ) : (
                 <span
                   className="text-[17px] sm:text-lg font-bold tracking-tight text-gray-800 dark:text-gray-100"
                 >
-                  GPT Image 2 For TJH
+                  {APP_NAME}
                 </span>
               )}
             </h1>

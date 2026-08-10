@@ -28,12 +28,12 @@ interface DashboardData {
 type RangeDays = 7 | 30
 type TrendKey = 'input_tokens' | 'output_tokens' | 'cache_creation_tokens' | 'cache_read_tokens'
 
-const MODEL_COLORS = ['#2563eb', '#059669', '#d97706', '#dc2626', '#7c3aed', '#0891b2', '#db2777', '#65a30d']
+const MODEL_COLORS = ['#22d3ee', '#34d399', '#fbbf24', '#fb7185', '#a78bfa', '#60a5fa', '#2dd4bf', '#f472b6']
 const TREND_SERIES: Array<{ key: TrendKey; label: string; color: string }> = [
-    { key: 'input_tokens', label: '输入', color: '#2563eb' },
-    { key: 'output_tokens', label: '输出', color: '#059669' },
-    { key: 'cache_creation_tokens', label: '缓存写入', color: '#d97706' },
-    { key: 'cache_read_tokens', label: '缓存读取', color: '#0891b2' },
+    { key: 'input_tokens', label: '输入', color: '#22d3ee' },
+    { key: 'output_tokens', label: '输出', color: '#34d399' },
+    { key: 'cache_creation_tokens', label: '缓存写入', color: '#fbbf24' },
+    { key: 'cache_read_tokens', label: '缓存读取', color: '#a78bfa' },
 ]
 
 function formatLocalDate(date: Date) {
@@ -139,7 +139,7 @@ export default function UserDashboardPanel({ user, onUserChange }: UserDashboard
     )
     const modelTokenTotal = sortedModels.reduce((sum, item) => sum + Math.max(0, item.total_tokens || 0), 0)
     const modelGradient = useMemo(() => {
-        if (modelTokenTotal <= 0) return '#e5e7eb'
+        if (modelTokenTotal <= 0) return '#1a2230'
         let cursor = 0
         return `conic-gradient(${sortedModels.map((item, idx) => {
             const start = cursor
@@ -160,16 +160,16 @@ export default function UserDashboardPanel({ user, onUserChange }: UserDashboard
 
     if (isLoading && !data) {
         return (
-            <div aria-label="正在加载仪表盘" className="space-y-6">
-                <div className="h-20 animate-pulse rounded-lg bg-gray-200/70 dark:bg-white/[0.06]" />
-                <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <div role="status" aria-live="polite" aria-label="正在加载仪表盘" className="console-page space-y-6">
+                <div className="console-skeleton h-24 rounded-lg" />
+                <div className="console-dashboard-metrics console-stagger grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                     {Array.from({ length: 8 }, (_, idx) => (
-                        <div key={idx} className="h-28 animate-pulse rounded-lg bg-gray-200/70 dark:bg-white/[0.06]" />
+                        <div key={idx} className="console-skeleton h-28 rounded-lg" />
                     ))}
                 </div>
-                <div className="grid gap-6 lg:grid-cols-2">
-                    <div className="h-72 animate-pulse rounded-lg bg-gray-200/70 dark:bg-white/[0.06]" />
-                    <div className="h-72 animate-pulse rounded-lg bg-gray-200/70 dark:bg-white/[0.06]" />
+                <div className="grid gap-6 xl:grid-cols-2">
+                    <div className="console-skeleton h-80 rounded-lg" />
+                    <div className="console-skeleton h-80 rounded-lg" />
                 </div>
             </div>
         )
@@ -177,13 +177,13 @@ export default function UserDashboardPanel({ user, onUserChange }: UserDashboard
 
     if (error && !data) {
         return (
-            <section className="flex min-h-80 flex-col items-center justify-center rounded-lg border border-red-200 bg-red-50 px-6 text-center dark:border-red-500/20 dark:bg-red-500/10">
-                <h1 className="text-lg font-semibold text-red-800 dark:text-red-100">仪表盘暂时无法加载</h1>
-                <p className="mt-2 max-w-md text-sm text-red-700 dark:text-red-200">{error}</p>
+            <section role="alert" className="console-page console-error-panel flex min-h-80 flex-col items-center justify-center px-6 text-center">
+                <h1 className="text-lg font-semibold text-red-100">仪表盘暂时无法加载</h1>
+                <p className="mt-2 max-w-md text-sm text-red-200/80">{error}</p>
                 <button
                     type="button"
                     onClick={() => void loadDashboard()}
-                    className="mt-5 flex h-10 items-center gap-2 rounded-lg bg-red-700 px-4 text-sm font-semibold text-white transition-colors hover:bg-red-800 dark:bg-red-500 dark:hover:bg-red-400"
+                    className="console-button console-button--danger mt-5"
                 >
                     <RefreshIcon className="h-4 w-4" />
                     重新加载
@@ -200,70 +200,62 @@ export default function UserDashboardPanel({ user, onUserChange }: UserDashboard
             label: '可用余额',
             value: formatCost(user.balance ?? 0, 2),
             detail: '当前账户余额',
-            color: 'text-emerald-600 dark:text-emerald-300',
-            accent: 'bg-emerald-500',
+            tone: 'success',
         },
         {
             label: 'API 密钥',
             value: stats.active_api_keys.toLocaleString('zh-CN'),
             detail: `${stats.total_api_keys.toLocaleString('zh-CN')} 个密钥`,
-            color: 'text-blue-600 dark:text-blue-300',
-            accent: 'bg-blue-500',
+            tone: 'accent',
         },
         {
             label: '今日请求',
             value: stats.today_requests.toLocaleString('zh-CN'),
             detail: `累计 ${stats.total_requests.toLocaleString('zh-CN')}`,
-            color: 'text-gray-950 dark:text-white',
-            accent: 'bg-cyan-500',
+            tone: 'accent',
         },
         {
             label: '今日消费',
             value: formatCost(stats.today_actual_cost),
             detail: `累计 ${formatCost(stats.total_actual_cost)}`,
-            color: 'text-violet-600 dark:text-violet-300',
-            accent: 'bg-violet-500',
+            tone: 'warning',
         },
         {
             label: '今日 Token',
             value: formatCompact(stats.today_tokens),
             detail: `输入 ${formatCompact(stats.today_input_tokens)} / 输出 ${formatCompact(stats.today_output_tokens)}`,
-            color: 'text-gray-950 dark:text-white',
-            accent: 'bg-amber-500',
+            tone: 'accent',
         },
         {
             label: '累计 Token',
             value: formatCompact(stats.total_tokens),
             detail: `输入 ${formatCompact(stats.total_input_tokens)} / 输出 ${formatCompact(stats.total_output_tokens)}`,
-            color: 'text-gray-950 dark:text-white',
-            accent: 'bg-indigo-500',
+            tone: 'accent',
         },
         {
             label: '性能指标',
             value: `${formatCompact(stats.rpm)} RPM`,
             detail: `${formatCompact(stats.tpm)} TPM`,
-            color: 'text-gray-950 dark:text-white',
-            accent: 'bg-fuchsia-500',
+            tone: 'success',
         },
         {
             label: '平均响应',
             value: formatDuration(stats.average_duration_ms),
             detail: '请求平均耗时',
-            color: 'text-gray-950 dark:text-white',
-            accent: 'bg-rose-500',
+            tone: 'warning',
         },
     ]
 
     return (
-        <div className="space-y-8">
-            <section className="border-b border-gray-200 pb-6 dark:border-white/[0.08]">
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div className="console-page space-y-6">
+            <header className="console-page-header">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                     <div>
-                        <h1 className="text-2xl font-bold text-gray-950 dark:text-white">用量仪表盘</h1>
-                        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">查看账户消耗、模型分布与 API 调用趋势</p>
+                        <h1 className="console-page-title">用量仪表盘</h1>
+                        <p className="console-page-description mt-2 text-sm">查看账户消耗、模型分布与 API 调用趋势</p>
                     </div>
                     <div className="flex items-center gap-2">
-                        <div className="grid h-9 grid-cols-2 rounded-lg bg-gray-100 p-1 dark:bg-white/[0.06]" aria-label="统计时间范围">
+                        <div className="console-segmented grid h-11 grid-cols-2 p-1" aria-label="统计时间范围">
                             {([7, 30] as const).map((days) => (
                                 <button
                                     key={days}
@@ -273,7 +265,7 @@ export default function UserDashboardPanel({ user, onUserChange }: UserDashboard
                                         setData(null)
                                         setRangeDays(days)
                                     }}
-                                    className={`rounded-md px-3 text-xs font-semibold transition-colors ${rangeDays === days ? 'bg-white text-gray-950 shadow-sm dark:bg-gray-800 dark:text-white' : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}`}
+                                    className={`console-segmented-button ${rangeDays === days ? 'is-active' : ''}`}
                                     aria-pressed={rangeDays === days}
                                 >
                                     {days} 天
@@ -284,7 +276,7 @@ export default function UserDashboardPanel({ user, onUserChange }: UserDashboard
                             type="button"
                             onClick={() => void loadDashboard()}
                             disabled={isLoading}
-                            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 disabled:cursor-wait disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-gray-400 dark:hover:bg-white/[0.08] dark:hover:text-white"
+                            className="console-icon-button"
                             aria-label="刷新仪表盘"
                             title="刷新仪表盘"
                         >
@@ -292,38 +284,38 @@ export default function UserDashboardPanel({ user, onUserChange }: UserDashboard
                         </button>
                     </div>
                 </div>
-                <p className="mt-4 text-xs text-gray-400 dark:text-gray-500" aria-live="polite">
+                <p className={`mt-3 min-h-5 text-xs ${error ? 'text-red-300' : 'console-muted'}`} aria-live="polite">
                     {error ? `刷新失败：${error}` : updatedAt ? `更新于 ${updatedAt.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })}` : ''}
                 </p>
-            </section>
+            </header>
 
             <section aria-label="账户用量概览">
-                <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                <div className="console-dashboard-metrics console-stagger grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                     {metricItems.map((item) => (
-                        <article key={item.label} className="relative min-h-28 overflow-hidden rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:border-white/[0.08] dark:bg-white/[0.03]">
-                            <span className={`absolute inset-y-0 left-0 w-1 ${item.accent}`} />
-                            <p className="text-xs font-medium text-gray-500 dark:text-gray-400">{item.label}</p>
-                            <p className={`mt-2 break-words text-xl font-bold tabular-nums ${item.color}`}>{item.value}</p>
-                            <p className="mt-1 truncate text-[11px] text-gray-500 dark:text-gray-400" title={item.detail}>{item.detail}</p>
+                        <article key={item.label} className={`console-metric console-tone-${item.tone}`}>
+                            <span className="console-metric-signal" aria-hidden="true" />
+                            <p className="console-metric-label">{item.label}</p>
+                            <p className="console-metric-value mt-2 break-words tabular-nums">{item.value}</p>
+                            <p className="console-metric-detail mt-1 leading-5">{item.detail}</p>
                         </article>
                     ))}
                 </div>
             </section>
 
             {stats.by_platform && stats.by_platform.length > 0 ? (
-                <section className="border-y border-gray-200 py-6 dark:border-white/[0.08]">
-                    <div className="flex items-center justify-between gap-4">
-                        <h2 className="text-base font-semibold">按平台拆分</h2>
-                        <span className="text-xs text-gray-500 dark:text-gray-400">{stats.by_platform.length} 个平台</span>
+                <section className="console-panel overflow-hidden">
+                    <div className="console-panel-header flex min-h-16 items-center justify-between gap-4 px-5 py-3">
+                        <h2 className="console-panel-title">按平台拆分</h2>
+                        <span className="console-muted text-xs">{stats.by_platform.length} 个平台</span>
                     </div>
-                    <div className="mt-4 grid gap-px overflow-hidden rounded-lg border border-gray-200 bg-gray-200 sm:grid-cols-2 dark:border-white/[0.08] dark:bg-white/[0.08]">
+                    <div className="console-platform-grid grid sm:grid-cols-2">
                         {stats.by_platform.map((item) => (
-                            <article key={item.platform} className="bg-white px-4 py-3 dark:bg-gray-950">
+                            <article key={item.platform} className="console-platform-item px-5 py-4">
                                 <div className="flex items-center justify-between gap-3">
-                                    <p className="truncate text-sm font-semibold capitalize">{item.platform}</p>
-                                    <p className="shrink-0 font-mono text-sm text-violet-600 dark:text-violet-300">{formatCost(item.total_actual_cost)}</p>
+                                    <p className="truncate text-sm font-semibold capitalize text-white">{item.platform}</p>
+                                    <p className="console-success-text shrink-0 font-mono text-sm font-semibold">{formatCost(item.total_actual_cost)}</p>
                                 </div>
-                                <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                                <p className="console-muted mt-2 text-xs">
                                     今日 {formatCost(item.today_actual_cost)} · {item.total_requests.toLocaleString('zh-CN')} 次 · {formatCompact(item.total_tokens)} Token
                                 </p>
                             </article>
@@ -332,39 +324,39 @@ export default function UserDashboardPanel({ user, onUserChange }: UserDashboard
                 </section>
             ) : null}
 
-            <section className="grid gap-8 lg:grid-cols-2">
-                <div className="min-w-0">
+            <section className="grid gap-6 xl:grid-cols-2">
+                <div className="console-panel min-w-0 p-5">
                     <div className="flex items-center justify-between gap-3">
-                        <h2 className="text-base font-semibold">模型分布</h2>
-                        <span className="text-xs text-gray-500 dark:text-gray-400">按 Token 统计</span>
+                        <h2 className="console-panel-title">模型分布</h2>
+                        <span className="console-muted text-xs">按 Token 统计</span>
                     </div>
                     {sortedModels.length === 0 || modelTokenTotal <= 0 ? (
-                        <div className="mt-4 flex h-64 items-center justify-center rounded-lg border border-dashed border-gray-300 text-sm text-gray-500 dark:border-white/[0.12] dark:text-gray-400">暂无模型用量</div>
+                        <div className="console-empty mt-4 flex h-64 items-center justify-center text-sm">暂无模型用量</div>
                     ) : (
                         <div className="mt-4 grid items-center gap-6 sm:grid-cols-[10rem_minmax(0,1fr)]">
-                            <div className="relative mx-auto aspect-square w-40 shrink-0 rounded-full" style={{ background: modelGradient }} role="img" aria-label="模型 Token 分布环形图">
-                                <div className="absolute inset-7 flex items-center justify-center rounded-full bg-gray-50 text-center dark:bg-gray-950">
+                            <div className="console-donut relative mx-auto aspect-square w-40 shrink-0 rounded-full" style={{ background: modelGradient }} role="img" aria-label="模型 Token 分布环形图">
+                                <div className="console-donut-core absolute inset-7 flex items-center justify-center rounded-full text-center">
                                     <span>
-                                        <span className="block text-lg font-bold tabular-nums">{formatCompact(modelTokenTotal)}</span>
-                                        <span className="mt-0.5 block text-[10px] text-gray-500 dark:text-gray-400">总 Token</span>
+                                        <span className="block text-lg font-bold tabular-nums text-white">{formatCompact(modelTokenTotal)}</span>
+                                        <span className="console-muted mt-1 block text-xs">总 Token</span>
                                     </span>
                                 </div>
                             </div>
                             <div className="max-h-64 min-w-0 overflow-y-auto">
                                 <div>
-                                    <div className="grid grid-cols-[minmax(0,1fr)_3.5rem_4.5rem] gap-2 border-b border-gray-200 pb-2 text-[11px] text-gray-500 sm:grid-cols-[minmax(0,1fr)_4rem_5rem] sm:gap-3 dark:border-white/[0.08] dark:text-gray-400">
+                                    <div className="console-table-header grid grid-cols-[minmax(0,1fr)_3.5rem_4.5rem] gap-2 pb-2 text-xs sm:grid-cols-[minmax(0,1fr)_4rem_5rem] sm:gap-3">
                                         <span>模型</span>
                                         <span className="text-right">Token</span>
                                         <span className="text-right">实际消费</span>
                                     </div>
                                     {sortedModels.map((item, idx) => (
-                                        <div key={item.model} className="grid grid-cols-[minmax(0,1fr)_3.5rem_4.5rem] items-center gap-2 border-b border-gray-100 py-2 text-xs sm:grid-cols-[minmax(0,1fr)_4rem_5rem] sm:gap-3 last:border-b-0 dark:border-white/[0.05]">
+                                        <div key={item.model} className="console-table-row grid grid-cols-[minmax(0,1fr)_3.5rem_4.5rem] items-center gap-2 py-2 text-xs sm:grid-cols-[minmax(0,1fr)_4rem_5rem] sm:gap-3">
                                             <span className="flex min-w-0 items-center gap-2">
                                                 <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: MODEL_COLORS[idx % MODEL_COLORS.length] }} />
                                                 <span className="truncate font-medium" title={item.model}>{item.model}</span>
                                             </span>
-                                            <span className="text-right tabular-nums text-gray-600 dark:text-gray-300">{formatCompact(item.total_tokens)}</span>
-                                            <span className="text-right tabular-nums text-emerald-600 dark:text-emerald-300">{formatCost(item.actual_cost)}</span>
+                                            <span className="console-secondary-text text-right tabular-nums">{formatCompact(item.total_tokens)}</span>
+                                            <span className="console-success-text text-right tabular-nums">{formatCost(item.actual_cost)}</span>
                                         </div>
                                     ))}
                                 </div>
@@ -373,27 +365,27 @@ export default function UserDashboardPanel({ user, onUserChange }: UserDashboard
                     )}
                 </div>
 
-                <div className="min-w-0">
+                <div className="console-panel min-w-0 p-5">
                     <div className="flex flex-wrap items-center justify-between gap-3">
-                        <h2 className="text-base font-semibold">Token 使用趋势</h2>
+                        <h2 className="console-panel-title">Token 使用趋势</h2>
                         <div className="flex flex-wrap justify-end gap-x-3 gap-y-1">
                             {TREND_SERIES.map((series) => (
-                                <span key={series.key} className="flex items-center gap-1 text-[10px] text-gray-500 dark:text-gray-400">
-                                    <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: series.color }} />
+                                <span key={series.key} className="console-muted flex items-center gap-1.5 text-xs">
+                                    <span className="h-2 w-2 rounded-full" style={{ backgroundColor: series.color }} />
                                     {series.label}
                                 </span>
                             ))}
                         </div>
                     </div>
                     {data.trend.length === 0 || trendMax <= 0 ? (
-                        <div className="mt-4 flex h-64 items-center justify-center rounded-lg border border-dashed border-gray-300 text-sm text-gray-500 dark:border-white/[0.12] dark:text-gray-400">所选时间范围暂无趋势数据</div>
+                        <div className="console-empty mt-4 flex h-64 items-center justify-center px-4 text-center text-sm">所选时间范围暂无趋势数据</div>
                     ) : (
                         <div className="mt-4">
-                            <div className="aspect-[16/7] min-h-52 w-full overflow-hidden rounded-lg border border-gray-200 bg-white dark:border-white/[0.08] dark:bg-white/[0.02]">
+                            <div className="console-chart aspect-[16/7] min-h-52 w-full overflow-hidden rounded-lg">
                                 <svg viewBox="0 0 640 240" className="h-full w-full" role="img" aria-label={`近 ${rangeDays} 天 Token 使用趋势`} preserveAspectRatio="none">
                                     <title>近 {rangeDays} 天 Token 使用趋势</title>
                                     {[46, 87, 128, 169, 210].map((y) => (
-                                        <line key={y} x1="24" x2="616" y1={y} y2={y} stroke="currentColor" className="text-gray-200 dark:text-white/[0.08]" strokeWidth="1" />
+                                        <line key={y} x1="24" x2="616" y1={y} y2={y} stroke="currentColor" className="console-chart-gridline" strokeWidth="1" />
                                     ))}
                                     {TREND_SERIES.map((series) => (
                                         <polyline
@@ -405,11 +397,13 @@ export default function UserDashboardPanel({ user, onUserChange }: UserDashboard
                                             strokeLinecap="round"
                                             strokeLinejoin="round"
                                             vectorEffect="non-scaling-stroke"
+                                            pathLength={1}
+                                            className="console-chart-line"
                                         />
                                     ))}
                                 </svg>
                             </div>
-                            <div className="mt-2 flex justify-between text-[10px] text-gray-500 dark:text-gray-400">
+                            <div className="console-muted mt-2 flex justify-between text-xs">
                                 <span>{data.trend[0]?.date.slice(5)}</span>
                                 <span>峰值 {formatCompact(trendMax)}</span>
                                 <span>{data.trend[data.trend.length - 1]?.date.slice(5)}</span>
@@ -419,24 +413,24 @@ export default function UserDashboardPanel({ user, onUserChange }: UserDashboard
                 </div>
             </section>
 
-            <section className="border-t border-gray-200 pt-7 dark:border-white/[0.08]">
-                <div className="flex items-center justify-between gap-4">
-                    <h2 className="text-base font-semibold">最近使用</h2>
-                    <span className="text-xs text-gray-500 dark:text-gray-400">最近 5 条</span>
+            <section className="console-panel overflow-hidden">
+                <div className="console-panel-header flex min-h-16 items-center justify-between gap-4 px-5 py-3">
+                    <h2 className="console-panel-title">最近使用</h2>
+                    <span className="console-muted text-xs">最近 5 条</span>
                 </div>
                 {data.usage.length === 0 ? (
-                    <div className="mt-4 flex min-h-28 items-center justify-center rounded-lg border border-dashed border-gray-300 text-sm text-gray-500 dark:border-white/[0.12] dark:text-gray-400">暂无 API 调用记录</div>
+                    <div className="console-empty m-5 flex min-h-28 items-center justify-center text-sm">暂无 API 调用记录</div>
                 ) : (
-                    <div className="mt-4 divide-y divide-gray-200 border-y border-gray-200 dark:divide-white/[0.08] dark:border-white/[0.08]">
+                    <div className="console-data-list">
                         {data.usage.map((item) => (
-                            <article key={item.id} className="grid min-h-16 grid-cols-[minmax(0,1fr)_auto] items-center gap-4 py-3">
+                            <article key={item.id} className="console-data-row grid min-h-[4.5rem] grid-cols-[minmax(0,1fr)_auto] items-center gap-4 px-5 py-3">
                                 <div className="min-w-0">
-                                    <p className="truncate text-sm font-semibold" title={item.model}>{item.model || '未知模型'}</p>
-                                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{formatDateTime(item.created_at)} · {formatCompact(item.input_tokens + item.output_tokens)} Token</p>
+                                    <p className="truncate text-sm font-semibold text-white" title={item.model}>{item.model || '未知模型'}</p>
+                                    <p className="console-muted mt-1 text-xs">{formatDateTime(item.created_at)} · {formatCompact(item.input_tokens + item.output_tokens)} Token</p>
                                 </div>
                                 <div className="text-right">
-                                    <p className="font-mono text-sm font-semibold text-emerald-600 dark:text-emerald-300">{formatCost(item.actual_cost)}</p>
-                                    <p className="mt-1 text-[10px] text-gray-400 dark:text-gray-500">标准 {formatCost(item.total_cost)}</p>
+                                    <p className="console-success-text font-mono text-sm font-semibold">{formatCost(item.actual_cost)}</p>
+                                    <p className="console-muted mt-1 text-xs">标准 {formatCost(item.total_cost)}</p>
                                 </div>
                             </article>
                         ))}

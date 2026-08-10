@@ -1,7 +1,7 @@
 {
-  "name": "GPT Image 2 For TJH",
-  "short_name": "GPT Image 2",
-  "description": "GPT Image 2 For TJH 图像生成工作台",
+  "name": "万象灵感 OmniMuse",
+  "short_name": "OmniMuse",
+  "description": "多模态 AI 创作与 Agent 对话工作台",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
@@ -9,7 +9,7 @@
   "theme_color": "#111827",
   "icons": [
     {
-      "src": "./brand/gpt-img-2-for-tjh-icon.png",
+      "src": "./brand/omni-muse-icon.png",
       "sizes": "1024x1024",
       "type": "image/png",
       "purpose": "any maskable"

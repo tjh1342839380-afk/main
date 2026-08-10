@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
+import { APP_REPOSITORY, APP_REPOSITORY_URL } from '../lib/brand'
 
-const REPO = 'CookSleep/gpt_image_playground'
-const API_URL = `https://api.github.com/repos/${REPO}/releases/latest`
+const API_URL = `https://api.github.com/repos/${APP_REPOSITORY}/releases/latest`
 
 function compareVersions(a: string, b: string) {
   const aParts = a.split('.').map((part) => Number.parseInt(part, 10) || 0)
@@ -48,7 +48,7 @@ export function useVersionCheck() {
         if (version && compareVersions(version, __APP_VERSION__) > 0) {
           setLatestRelease({
             tag,
-            url: data.html_url ?? `https://github.com/${REPO}/releases/latest`,
+            url: data.html_url ?? `${APP_REPOSITORY_URL}/releases/latest`,
           })
         }
       })

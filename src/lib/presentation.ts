@@ -1,5 +1,6 @@
 import type { AgentPresentationSlide, AgentPresentationSlideLayout, AgentPresentationSpec } from '../types'
 import { extractAgentReferenceIds } from './agentImageReferences'
+import { APP_SHORT_NAME } from './brand'
 
 const PRESENTATION_LAYOUTS = new Set<AgentPresentationSlideLayout>(['title', 'section', 'content', 'image', 'split'])
 const MAX_SLIDES = 40
@@ -108,8 +109,8 @@ export async function createAgentPresentationBlob(spec: AgentPresentationSpec, i
   const accent = spec.accentColor
 
   pptx.layout = spec.aspectRatio === 'standard' ? 'LAYOUT_4X3' : 'LAYOUT_WIDE'
-  pptx.author = 'GPT Image 2 For TJH'
-  pptx.company = 'GPT Image 2 For TJH'
+  pptx.author = APP_SHORT_NAME
+  pptx.company = APP_SHORT_NAME
   pptx.subject = spec.subtitle || spec.title
   pptx.title = spec.title
   pptx.theme = {

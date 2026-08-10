@@ -2,8 +2,9 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useStore } from '../store'
 import { useCloseOnEscape } from '../hooks/useCloseOnEscape'
 import { usePreventBackgroundScroll } from '../hooks/usePreventBackgroundScroll'
+import { APP_SHORT_NAME } from '../lib/brand'
 import { listSub2ApiKeys, type Sub2ApiApiKey, type Sub2ApiUser } from '../lib/sub2apiAuth'
-import { ChartBarIcon, CheckIcon, ChevronLeftIcon, CodeIcon, LayoutDashboardIcon, LogOutIcon, RefreshIcon, SettingsIcon, UserIcon } from './icons'
+import { ChartBarIcon, ChevronLeftIcon, CodeIcon, LayoutDashboardIcon, LogOutIcon, RefreshIcon, SettingsIcon, UserIcon } from './icons'
 import UserDashboardPanel from './UserDashboardPanel'
 import UserProfilePanel from './UserProfilePanel'
 
@@ -15,6 +16,12 @@ interface UserConsoleProps {
     onClose: () => void
     onLogout: () => void
 }
+
+const CONSOLE_SECTIONS = [
+    { id: 'overview', label: '账户概览', compactLabel: '概览', icon: LayoutDashboardIcon },
+    { id: 'dashboard', label: '用量仪表盘', compactLabel: '数据', icon: ChartBarIcon },
+    { id: 'profile', label: '个人资料', compactLabel: '资料', icon: UserIcon },
+] as const
 
 export default function UserConsole({ user, onUserChange, onClose, onLogout }: UserConsoleProps) {
     const setShowSettings = useStore((s) => s.setShowSettings)
@@ -44,6 +51,7 @@ export default function UserConsole({ user, onUserChange, onClose, onLogout }: U
 
     useEffect(() => {
         scrollRef.current?.scrollTo({ top: 0 })
+        scrollRef.current?.focus({ preventScroll: true })
     }, [activeSection])
 
     useCloseOnEscape(!showSettings, onClose)
@@ -52,218 +60,234 @@ export default function UserConsole({ user, onUserChange, onClose, onLogout }: U
     const activeKeys = keys.filter((item) => item.status === 'active')
     const roleLabel = user.role === 'admin' ? '管理员' : '用户'
     const statusLabel = user.status === 'disabled' ? '已停用' : '正常'
+    const apiStatusLabel = isLoading ? '检测中' : error ? '连接异常' : activeKeys.length > 0 ? '已接入' : '待配置'
+    const serviceStatusLabel = user.status === 'disabled' ? '不可用' : isLoading ? '检测中' : error ? '连接异常' : '正常'
+    const serviceStatusTextClass = user.status === 'disabled' || error ? 'text-rose-300' : isLoading ? 'text-amber-300' : 'console-success-text'
+    const serviceStatusDotClass = user.status === 'disabled' || error
+        ? 'bg-rose-400 shadow-[0_0_10px_rgba(251,113,133,0.55)]'
+        : isLoading
+            ? 'animate-pulse bg-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.45)]'
+            : 'console-status-dot'
 
     return (
-        <div data-no-drag-select className="fixed inset-0 z-[60] flex h-[100dvh] flex-col overflow-hidden bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
-            <header className="safe-area-top shrink-0 border-b border-gray-200/80 bg-white/95 backdrop-blur-xl dark:border-white/[0.08] dark:bg-gray-950/95">
-                <div className="safe-area-x mx-auto flex h-16 max-w-6xl items-center justify-between gap-4">
-                    <div className="flex min-w-0 items-center gap-3">
-                        <button
-                            type="button"
-                            onClick={onClose}
-                            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-white/[0.08] dark:hover:text-white"
-                            aria-label="返回创作空间"
-                        >
-                            <ChevronLeftIcon className="h-5 w-5" />
-                        </button>
-                        <div className="min-w-0">
-                            <p className="truncate text-sm font-semibold text-gray-900 dark:text-white">GPT Image 2 For TJH</p>
-                            <p className="text-xs text-gray-500 dark:text-gray-400">账户控制台</p>
+        <div data-user-console data-no-drag-select className="console-shell fixed inset-0 z-[60] flex h-[100dvh] flex-col overflow-hidden lg:flex-row">
+            <a
+                href="#console-content"
+                onClick={(event) => {
+                    event.preventDefault()
+                    scrollRef.current?.focus({ preventScroll: true })
+                    scrollRef.current?.scrollTo({ top: 0 })
+                }}
+                className="console-skip-link sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4"
+            >
+                跳转到主要内容
+            </a>
+
+            <aside className="console-rail safe-area-top relative z-20 flex shrink-0 flex-col lg:h-full lg:w-64 xl:w-72">
+                <div className="console-rail-header safe-area-x flex h-16 shrink-0 items-center gap-3 lg:h-[4.75rem]">
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        className="console-icon-button lg:hidden"
+                        aria-label="返回创作空间"
+                        title="返回创作空间"
+                    >
+                        <ChevronLeftIcon className="h-5 w-5" />
+                    </button>
+                    <div className="flex min-w-0 flex-1 items-center gap-3">
+                        <span className="console-brand-mark">
+                            <img src="/brand/omni-muse-icon.png" alt="" aria-hidden="true" className="h-full w-full object-cover" />
+                        </span>
+                        <div className="min-w-0 leading-tight">
+                            <p className="truncate text-sm font-bold text-white">{APP_SHORT_NAME}</p>
+                            <p className="console-muted mt-1 truncate text-xs">账户控制台</p>
                         </div>
                     </div>
                     <button
                         type="button"
                         onClick={onLogout}
-                        className="flex h-9 items-center gap-2 rounded-lg px-3 text-sm font-medium text-red-600 transition-colors hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-500/10"
+                        className="console-icon-button console-icon-button--danger lg:hidden"
                         aria-label="退出登录"
+                        title="退出登录"
                     >
-                        <LogOutIcon className="h-4 w-4" />
-                        <span className="hidden sm:inline">退出登录</span>
+                        <LogOutIcon className="h-5 w-5" />
                     </button>
                 </div>
-            </header>
 
-            <main ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-                <div className="safe-area-x mx-auto grid max-w-6xl gap-8 py-8 lg:grid-cols-[14rem_minmax(0,1fr)] lg:py-10">
-                    <aside className="lg:sticky lg:top-8 lg:self-start">
-                        <div className="flex items-center gap-3 border-b border-gray-200 pb-5 dark:border-white/[0.08]">
-                            <span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-blue-500 text-white shadow-sm">
-                                {user.avatar_url ? (
-                                    <img src={user.avatar_url} alt="" className="h-full w-full object-cover" />
-                                ) : (
-                                    <UserIcon className="h-5 w-5" />
-                                )}
-                            </span>
-                            <div className="min-w-0">
-                                <p className="truncate text-sm font-semibold">{user.username || user.email}</p>
-                                <p className="truncate text-xs text-gray-500 dark:text-gray-400">{user.email}</p>
-                            </div>
-                        </div>
-                        <nav className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-1" aria-label="控制台导航">
-                            <button
-                                type="button"
-                                onClick={() => setActiveSection('overview')}
-                                className={`flex h-10 items-center justify-center gap-2 rounded-lg px-2 text-sm font-medium transition-colors lg:justify-start lg:px-3 ${activeSection === 'overview' ? 'bg-blue-50 text-blue-700 dark:bg-blue-500/15 dark:text-blue-200' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-white/[0.08] dark:hover:text-white'}`}
-                                aria-current={activeSection === 'overview' ? 'page' : undefined}
-                            >
-                                <LayoutDashboardIcon className="h-4 w-4 shrink-0" />
-                                账户概览
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => setActiveSection('dashboard')}
-                                className={`flex h-10 items-center justify-center gap-2 rounded-lg px-2 text-sm font-medium transition-colors lg:justify-start lg:px-3 ${activeSection === 'dashboard' ? 'bg-blue-50 text-blue-700 dark:bg-blue-500/15 dark:text-blue-200' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-white/[0.08] dark:hover:text-white'}`}
-                                aria-current={activeSection === 'dashboard' ? 'page' : undefined}
-                            >
-                                <ChartBarIcon className="h-4 w-4 shrink-0" />
-                                仪表盘
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => setActiveSection('profile')}
-                                className={`flex h-10 items-center justify-center gap-2 rounded-lg px-2 text-sm font-medium transition-colors lg:justify-start lg:px-3 ${activeSection === 'profile' ? 'bg-blue-50 text-blue-700 dark:bg-blue-500/15 dark:text-blue-200' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-white/[0.08] dark:hover:text-white'}`}
-                                aria-current={activeSection === 'profile' ? 'page' : undefined}
-                            >
-                                <UserIcon className="h-4 w-4 shrink-0" />
-                                个人资料
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => setShowSettings(true)}
-                                className="flex h-10 items-center justify-center gap-2 rounded-lg px-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 lg:justify-start lg:px-3 dark:text-gray-300 dark:hover:bg-white/[0.08] dark:hover:text-white"
-                            >
-                                <SettingsIcon className="h-4 w-4 shrink-0" />
-                                应用设置
-                            </button>
-                        </nav>
-                    </aside>
-
-                    <div className="min-w-0">
-                        {activeSection === 'dashboard' ? (
-                            <UserDashboardPanel user={user} onUserChange={onUserChange} />
-                        ) : activeSection === 'profile' ? (
-                            <UserProfilePanel
-                                user={user}
-                                onUserChange={onUserChange}
-                                onPasswordChanged={onLogout}
-                            />
+                <div className="console-identity mx-5 hidden py-5 lg:flex lg:items-center lg:gap-3">
+                    <span className="console-avatar relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden font-semibold text-white">
+                        {user.avatar_url ? (
+                            <img src={user.avatar_url} alt="" className="h-full w-full object-cover" />
                         ) : (
-                            <>
-                        <section className="border-b border-gray-200 pb-8 dark:border-white/[0.08]">
-                            <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-                                <div>
-                                    <h1 className="text-2xl font-bold text-gray-950 dark:text-white">账户概览</h1>
-                                </div>
-                                <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">
-                                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                                    已连接
-                                </span>
-                            </div>
-
-                            <ol className="mt-7 grid gap-px overflow-hidden rounded-lg border border-gray-200 bg-gray-200 sm:grid-cols-3 dark:border-white/[0.08] dark:bg-white/[0.08]">
-                                {[
-                                    ['账户', user.email],
-                                    ['API 接入', activeKeys.length > 0 ? '配置可用' : isLoading ? '正在检查' : error ? '连接失败' : '等待配置'],
-                                    ['应用设置', '可管理'],
-                                ].map(([label, value], idx) => (
-                                    <li key={label} className="flex min-h-20 items-center gap-3 bg-white px-4 py-3 dark:bg-gray-950">
-                                        <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${idx === 1 && !isLoading && activeKeys.length === 0 ? 'bg-gray-100 text-gray-400 dark:bg-white/[0.08] dark:text-gray-500' : 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-300'}`}>
-                                            <CheckIcon className="h-3.5 w-3.5" />
-                                        </span>
-                                        <span className="min-w-0">
-                                            <span className="block text-xs text-gray-500 dark:text-gray-400">{label}</span>
-                                            <span className="mt-0.5 block truncate text-sm font-semibold">{value}</span>
-                                        </span>
-                                    </li>
-                                ))}
-                            </ol>
-                        </section>
-
-                        <section className="grid border-b border-gray-200 py-7 sm:grid-cols-3 dark:border-white/[0.08]">
-                            <div className="border-b border-gray-200 py-4 sm:border-b-0 sm:border-r sm:px-5 sm:first:pl-0 dark:border-white/[0.08]">
-                                <p className="text-xs text-gray-500 dark:text-gray-400">可用 API Key</p>
-                                <p className="mt-2 text-xl font-semibold">{isLoading ? '-' : activeKeys.length}</p>
-                            </div>
-                            <div className="border-b border-gray-200 py-4 sm:border-b-0 sm:border-r sm:px-5 dark:border-white/[0.08]">
-                                <p className="text-xs text-gray-500 dark:text-gray-400">账户状态</p>
-                                <p className="mt-2 text-xl font-semibold">{statusLabel}</p>
-                            </div>
-                            <div className="py-4 sm:px-5 sm:last:pr-0">
-                                <p className="text-xs text-gray-500 dark:text-gray-400">账户角色</p>
-                                <p className="mt-2 text-xl font-semibold">{roleLabel}</p>
-                            </div>
-                        </section>
-
-                        <section className="border-b border-gray-200 py-8 dark:border-white/[0.08]">
-                            <div className="flex items-center justify-between gap-4">
-                                <div className="flex items-center gap-2">
-                                    <CodeIcon className="h-5 w-5 text-blue-600 dark:text-blue-300" />
-                                    <h2 className="text-base font-semibold">API Key</h2>
-                                </div>
-                                <button
-                                    type="button"
-                                    onClick={() => void loadKeys()}
-                                    disabled={isLoading}
-                                    className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 disabled:cursor-wait disabled:opacity-50 dark:text-gray-400 dark:hover:bg-white/[0.08] dark:hover:text-white"
-                                    aria-label="刷新 API Key"
-                                >
-                                    <RefreshIcon className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-                                </button>
-                            </div>
-
-                            <div className="mt-4 min-h-24" aria-live="polite">
-                                {isLoading ? (
-                                    <div className="space-y-2">
-                                        {[0, 1].map((item) => (
-                                            <div key={item} className="h-16 animate-pulse rounded-lg bg-gray-200/70 dark:bg-white/[0.06]" />
-                                        ))}
-                                    </div>
-                                ) : error ? (
-                                    <div className="flex min-h-24 flex-col items-start justify-center gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-200">
-                                        <p>{error}</p>
-                                        <button type="button" onClick={() => void loadKeys()} className="font-semibold hover:underline">重新加载</button>
-                                    </div>
-                                ) : keys.length === 0 ? (
-                                    <div className="flex min-h-24 items-center justify-center rounded-lg border border-dashed border-gray-300 text-sm text-gray-500 dark:border-white/[0.12] dark:text-gray-400">
-                                        暂无 API Key
-                                    </div>
-                                ) : (
-                                    <div className="space-y-2">
-                                        {keys.map((item) => (
-                                            <div key={item.id} className="grid min-h-16 grid-cols-[minmax(0,1fr)_auto] items-center gap-4 rounded-lg border border-gray-200 bg-white px-4 py-3 dark:border-white/[0.08] dark:bg-white/[0.03]">
-                                                <div className="min-w-0">
-                                                    <p className="truncate text-sm font-semibold">{item.name || '未命名 Key'}</p>
-                                                    <p className="mt-1 font-mono text-xs text-gray-500 dark:text-gray-400">{typeof item.key === 'string' && item.key ? `...${item.key.slice(-4)}` : '未返回 Key'}</p>
-                                                </div>
-                                                <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${item.status === 'active' ? 'text-emerald-700 dark:text-emerald-300' : 'text-gray-500 dark:text-gray-400'}`}>
-                                                    <span className={`h-1.5 w-1.5 rounded-full ${item.status === 'active' ? 'bg-emerald-500' : 'bg-gray-400'}`} />
-                                                    {item.status === 'active' ? '可用' : '已停用'}
-                                                </span>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
-                        </section>
-
-                        <section className="flex flex-col gap-4 py-8 sm:flex-row sm:items-center sm:justify-between">
-                            <div className="flex items-center gap-3">
-                                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-gray-600 dark:bg-white/[0.08] dark:text-gray-300">
-                                    <SettingsIcon className="h-5 w-5" />
-                                </span>
-                                <h2 className="text-base font-semibold">应用设置</h2>
-                            </div>
-                            <button
-                                type="button"
-                                onClick={() => setShowSettings(true)}
-                                className="h-10 rounded-lg bg-gray-900 px-4 text-sm font-semibold text-white transition-colors hover:bg-gray-700 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
-                            >
-                                打开设置
-                            </button>
-                        </section>
-                            </>
+                            <UserIcon className="h-5 w-5" />
                         )}
+                        {user.status !== 'disabled' && <span className="console-avatar-status" aria-hidden="true" />}
+                    </span>
+                    <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-white" title={user.username || user.email}>{user.username || user.email}</p>
+                        <p className="console-muted mt-1 truncate text-xs" title={user.email}>{user.email}</p>
                     </div>
+                </div>
+
+                <nav className="console-nav safe-area-x flex shrink-0 gap-2 overflow-x-auto py-2 lg:mt-5 lg:block lg:space-y-1 lg:overflow-visible lg:py-0" aria-label="控制台导航">
+                    <p className="console-nav-label mb-2 hidden px-3 text-xs font-semibold lg:block">工作区</p>
+                    {CONSOLE_SECTIONS.map((item) => {
+                        const Icon = item.icon
+                        const isActive = activeSection === item.id
+                        return (
+                            <button
+                                key={item.id}
+                                type="button"
+                                onClick={() => setActiveSection(item.id)}
+                                className={`console-nav-item ${isActive ? 'is-active' : ''}`}
+                                aria-current={isActive ? 'page' : undefined}
+                            >
+                                <span className="console-nav-icon"><Icon className="h-4 w-4" /></span>
+                                <span className="lg:hidden">{item.compactLabel}</span>
+                                <span className="hidden lg:inline">{item.label}</span>
+                            </button>
+                        )
+                    })}
+                    <button
+                        type="button"
+                        onClick={() => setShowSettings(true)}
+                        className="console-nav-item"
+                    >
+                        <span className="console-nav-icon"><SettingsIcon className="h-4 w-4" /></span>
+                        <span className="lg:hidden">设置</span>
+                        <span className="hidden lg:inline">应用设置</span>
+                    </button>
+                </nav>
+
+                <div className="console-rail-footer mt-auto hidden p-4 lg:block">
+                    <div className="console-runtime mb-3 flex items-center justify-between px-3 text-xs">
+                        <span className="flex items-center gap-2"><span className={`h-[7px] w-[7px] shrink-0 rounded-full ${serviceStatusDotClass}`} />服务连接</span>
+                        <span className={serviceStatusTextClass} aria-live="polite">{serviceStatusLabel}</span>
+                    </div>
+                    <button type="button" onClick={onClose} className="console-rail-action">
+                        <ChevronLeftIcon className="h-4 w-4" />
+                        返回创作空间
+                    </button>
+                    <button type="button" onClick={onLogout} className="console-rail-action console-rail-action--danger">
+                        <LogOutIcon className="h-4 w-4" />
+                        退出登录
+                    </button>
+                </div>
+            </aside>
+
+            <main id="console-content" ref={scrollRef} tabIndex={-1} className="console-main min-h-0 min-w-0 flex-1 select-text overflow-y-auto overscroll-contain outline-none">
+                <div className="safe-area-x relative z-[1] mx-auto w-full max-w-7xl pb-[calc(2rem+var(--safe-area-bottom))] pt-6 sm:pt-8 lg:px-8 lg:pb-10 lg:pt-10">
+                    {activeSection === 'dashboard' ? (
+                        <UserDashboardPanel user={user} onUserChange={onUserChange} />
+                    ) : activeSection === 'profile' ? (
+                        <UserProfilePanel
+                            user={user}
+                            onUserChange={onUserChange}
+                            onPasswordChanged={onLogout}
+                        />
+                    ) : (
+                        <div className="console-page space-y-6">
+                            <header className="console-page-header flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                                <div className="min-w-0">
+                                    <h1 className="console-page-title">账户概览</h1>
+                                    <p className="console-page-description mt-2 truncate text-sm" title={user.email}>{user.email}</p>
+                                </div>
+                                <span className={`console-status-chip ${user.status === 'disabled' ? 'is-danger' : 'is-success'}`}>
+                                    <span className="console-status-chip-dot" />
+                                    {statusLabel}
+                                </span>
+                            </header>
+
+                            <section className="console-stagger grid gap-3 sm:grid-cols-3" aria-label="账户状态">
+                                {[
+                                    {
+                                        label: '可用 API Key',
+                                        value: isLoading ? '-' : activeKeys.length.toLocaleString('zh-CN'),
+                                        detail: apiStatusLabel,
+                                        tone: error ? 'danger' : activeKeys.length > 0 ? 'accent' : 'muted',
+                                    },
+                                    {
+                                        label: '账户状态',
+                                        value: statusLabel,
+                                        detail: user.status === 'disabled' ? '访问受限' : '服务可用',
+                                        tone: user.status === 'disabled' ? 'danger' : 'success',
+                                    },
+                                    {
+                                        label: '账户角色',
+                                        value: roleLabel,
+                                        detail: user.role === 'admin' ? '管理权限' : '标准权限',
+                                        tone: 'warning',
+                                    },
+                                ].map((item) => (
+                                    <article key={item.label} className={`console-metric console-tone-${item.tone}`}>
+                                        <span className="console-metric-signal" aria-hidden="true" />
+                                        <p className="console-metric-label">{item.label}</p>
+                                        <p className="console-metric-value mt-3 tabular-nums">{item.value}</p>
+                                        <p className="console-metric-detail mt-1">{item.detail}</p>
+                                    </article>
+                                ))}
+                            </section>
+
+                            <section className="console-panel overflow-hidden" aria-labelledby="console-api-keys-title">
+                                <div className="console-panel-header flex min-h-16 items-center justify-between gap-4 px-5 py-3">
+                                    <div className="flex min-w-0 items-center gap-3">
+                                        <span className="console-panel-icon">
+                                            <CodeIcon className="h-4 w-4" />
+                                        </span>
+                                        <div className="min-w-0">
+                                            <h2 id="console-api-keys-title" className="console-panel-title">API Key</h2>
+                                            <p className="console-muted mt-1 text-xs">共 {isLoading ? '-' : keys.length} 个</p>
+                                        </div>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => void loadKeys()}
+                                        disabled={isLoading}
+                                        className="console-icon-button"
+                                        aria-label="刷新 API Key"
+                                        title="刷新 API Key"
+                                    >
+                                        <RefreshIcon className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+                                    </button>
+                                </div>
+
+                                <div className="min-h-28" aria-live="polite">
+                                    {isLoading ? (
+                                        <div className="space-y-3 p-5">
+                                            {[0, 1].map((item) => (
+                                                <div key={item} className="console-skeleton h-14 rounded-lg" />
+                                            ))}
+                                        </div>
+                                    ) : error ? (
+                                        <div className="console-message console-message--danger m-5 flex min-h-28 flex-col items-start justify-center gap-3 px-4 py-3 text-sm">
+                                            <p>{error}</p>
+                                            <button type="button" onClick={() => void loadKeys()} className="console-text-action min-h-11 font-semibold">重新加载</button>
+                                        </div>
+                                    ) : keys.length === 0 ? (
+                                        <div className="console-empty m-5 flex min-h-28 items-center justify-center px-4 text-center text-sm">
+                                            暂无 API Key
+                                        </div>
+                                    ) : (
+                                        <div className="console-data-list">
+                                            {keys.map((item) => (
+                                                <div key={item.id} className="console-data-row grid min-h-[4.5rem] grid-cols-[minmax(0,1fr)_auto] items-center gap-4 px-5 py-3">
+                                                    <div className="min-w-0">
+                                                        <p className="truncate text-sm font-semibold text-white">{item.name || '未命名 Key'}</p>
+                                                        <p className="console-muted mt-1 font-mono text-xs">{typeof item.key === 'string' && item.key ? `...${item.key.slice(-4)}` : '未返回 Key'}</p>
+                                                    </div>
+                                                    <span className={`console-inline-status ${item.status === 'active' ? 'is-success' : ''}`}>
+                                                        <span className="console-inline-status-dot" />
+                                                        {item.status === 'active' ? '可用' : '已停用'}
+                                                    </span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            </section>
+
+                        </div>
+                    )}
                 </div>
             </main>
         </div>

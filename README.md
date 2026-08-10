@@ -1,7 +1,7 @@
 <div align="center">
-  <img src="public/brand/gpt-img-2-for-tjh-icon.png" alt="GPT Image 2 for TJH" width="112" />
-  <h1>GPT Image 2 for TJH</h1>
-  <p>面向 OpenAI Images / Responses API 及兼容服务的 AI 图像生成、编辑与多轮 Agent 工作台</p>
+  <img src="public/brand/omni-muse-icon.png" alt="万象灵感 OmniMuse" width="112" />
+  <h1>万象灵感 OmniMuse</h1>
+  <p>面向图像生成、编辑与多轮 Agent 对话的多模态 AI 创作工作台</p>
 
   <p>
     <a href="RELEASE.md"><img src="https://img.shields.io/badge/version-0.6.10-2563eb" alt="Version 0.6.10" /></a>
@@ -124,14 +124,14 @@ npm run deploy:cf
 ### Docker / Nginx
 
 ```bash
-docker build -f deploy/Dockerfile -t gpt-image-2-for-tjh .
+docker build -f deploy/Dockerfile -t omni-muse .
 
 docker run --rm -p 8080:80 \
   -e DEFAULT_API_URL=https://api.example.com/v1 \
   -e API_PROXY_URL=https://api.example.com/v1 \
   -e SUB2API_AUTH_URL=https://sub2api.example.com/api/v1 \
   -e ENABLE_API_PROXY=true \
-  gpt-image-2-for-tjh
+  omni-muse
 ```
 
 容器启动后访问 [http://localhost:8080](http://localhost:8080)。其他可选运行时变量包括 `LOCK_API_PROXY` 和 `SHOW_DEFAULT_CONFIG_ONLY`。

@@ -27,6 +27,7 @@ import { FavoriteCollectionPickerModal, FavoriteCollectionsView, ManageCollectio
 import { useGlobalClickSuppression } from './lib/clickSuppression'
 
 let customProviderConfigUrlImportStarted = false
+// 保留旧品牌存储键，避免升级后重置动态背景偏好。
 const DYNAMIC_BACKGROUND_STORAGE_KEY = 'gpt-image-2-for-tjh:dynamic-background-enabled'
 const LEGACY_DYNAMIC_BACKGROUND_STORAGE_KEY = 'gpt-image-' + 'playground:dynamic-background-enabled'
 const STATIC_BACKGROUND_MANIFEST_URL = '/wallpapers/background-wallpapers.json'
@@ -421,7 +422,7 @@ export default function App() {
                 <ImageContextMenu />
               </>
             )}
-            <SettingsModal />
+            <SettingsModal consoleMode={showUserConsole} />
             <ConfirmDialog />
             <Toast />
           </>

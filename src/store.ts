@@ -68,6 +68,7 @@ import { AGENT_REFERENCE_FILE_MAX_BYTES, getAgentReferenceFileMimeType, validate
 export const ALL_FAVORITES_COLLECTION_ID = '__all_favorites__'
 export const DEFAULT_FAVORITE_COLLECTION_ID = '__default_favorites__'
 export const DEFAULT_FAVORITE_COLLECTION_NAME = '默认'
+// 保留旧品牌存储键，避免升级后丢失本地配置。
 const PERSIST_STORAGE_KEY = 'gpt-image-2-for-tjh'
 const LEGACY_PERSIST_STORAGE_KEY = 'gpt-image-' + 'playground'
 
@@ -5389,7 +5390,7 @@ export async function exportData(options: ExportOptions = { exportConfig: true, 
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `gpt-image-2-for-tjh-backup_${formatExportFileTime(new Date(exportedAt))}.zip`
+    a.download = `omni-muse-backup_${formatExportFileTime(new Date(exportedAt))}.zip`
     a.click()
     URL.revokeObjectURL(url)
     useStore.getState().showToast('数据已导出', 'success')

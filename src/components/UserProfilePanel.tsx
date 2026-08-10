@@ -87,10 +87,7 @@ function NoticeMessage({ notice }: { notice: Notice }) {
     return (
         <div
             role={notice.tone === 'error' ? 'alert' : 'status'}
-            className={`flex items-start gap-2 rounded-lg border px-3 py-2.5 text-sm ${notice.tone === 'success'
-                ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-200'
-                : 'border-red-200 bg-red-50 text-red-700 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-200'
-            }`}
+            className={`console-message flex items-start gap-2 px-3 py-2.5 text-sm ${notice.tone === 'success' ? 'console-message--success' : 'console-message--danger'}`}
         >
             {notice.tone === 'success' && <CheckIcon className="mt-0.5 h-4 w-4 shrink-0" />}
             <span>{notice.text}</span>
@@ -262,92 +259,88 @@ export default function UserProfilePanel({ user, onUserChange, onPasswordChanged
     }
 
     return (
-        <div className="min-w-0">
-            <section className="border-b border-gray-200 pb-8 dark:border-white/[0.08]">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-                    <div>
-                        <h1 className="text-2xl font-bold text-gray-950 dark:text-white">个人资料</h1>
-                    </div>
-                    <button
-                        type="button"
-                        onClick={() => void loadProfile()}
-                        disabled={isLoading}
-                        className="flex h-9 w-fit items-center gap-2 rounded-lg px-3 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 disabled:cursor-wait disabled:opacity-60 dark:text-gray-300 dark:hover:bg-white/[0.08] dark:hover:text-white"
-                    >
-                        <RefreshIcon className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-                        {isLoading ? '正在同步' : '刷新资料'}
-                    </button>
+        <div className="console-page min-w-0 space-y-6">
+            <header className="console-page-header flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                    <h1 className="console-page-title">个人资料</h1>
+                    <p className="console-page-description mt-2 truncate text-sm" title={profile.email}>{profile.email}</p>
                 </div>
+                <button
+                    type="button"
+                    onClick={() => void loadProfile()}
+                    disabled={isLoading}
+                    className="console-button console-button--secondary"
+                >
+                    <RefreshIcon className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+                    {isLoading ? '正在同步' : '刷新资料'}
+                </button>
+            </header>
 
-                {loadError && (
-                    <div role="alert" className="mt-5 flex flex-col items-start gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 sm:flex-row sm:items-center sm:justify-between dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-200">
-                        <span>{loadError}</span>
-                        <button type="button" onClick={() => void loadProfile()} className="shrink-0 font-semibold hover:underline">重新加载</button>
-                    </div>
-                )}
+            {loadError && (
+                <div role="alert" className="console-message console-message--danger flex flex-col items-start gap-3 px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+                    <span>{loadError}</span>
+                    <button type="button" onClick={() => void loadProfile()} className="console-text-action min-h-11 shrink-0 font-semibold">重新加载</button>
+                </div>
+            )}
 
-                <div className="mt-6 border-y border-gray-200 py-6 dark:border-white/[0.08]">
-                    <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
-                        <span className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-blue-500 text-2xl font-bold text-white shadow-sm">
-                            {avatarUrl ? <img src={avatarUrl} alt={displayName} className="h-full w-full object-cover" /> : avatarInitial}
-                        </span>
-                        <div className="min-w-0 flex-1">
-                            <div className="flex flex-wrap items-center gap-2">
-                                <h2 className="max-w-full truncate text-xl font-semibold text-gray-950 dark:text-white">{displayName}</h2>
-                                <span className="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-600 dark:bg-white/[0.08] dark:text-gray-300">{roleLabel}</span>
-                                <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${profile.status === 'disabled'
-                                    ? 'bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-300'
-                                    : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300'
-                                }`}>
-                                    <span className={`h-1.5 w-1.5 rounded-full ${profile.status === 'disabled' ? 'bg-red-500' : 'bg-emerald-500'}`} />
-                                    {statusLabel}
-                                </span>
-                            </div>
-                            <p className="mt-2 truncate text-sm text-gray-500 dark:text-gray-400">{profile.email}</p>
-                            <dl className="mt-5 grid border-y border-gray-200 sm:grid-cols-3 dark:border-white/[0.08]">
-                                <div className="border-b border-gray-200 px-4 py-3 sm:border-r sm:border-b-0 dark:border-white/[0.08]">
-                                    <dt className="text-xs text-gray-500 dark:text-gray-400">账户余额</dt>
-                                    <dd className="mt-1 text-base font-semibold">{formatBalance(profile.balance)}</dd>
-                                </div>
-                                <div className="border-b border-gray-200 px-4 py-3 sm:border-r sm:border-b-0 dark:border-white/[0.08]">
-                                    <dt className="text-xs text-gray-500 dark:text-gray-400">并发额度</dt>
-                                    <dd className="mt-1 text-base font-semibold">{profile.concurrency ?? '-'}</dd>
-                                </div>
-                                <div className="px-4 py-3">
-                                    <dt className="text-xs text-gray-500 dark:text-gray-400">注册时间</dt>
-                                    <dd className="mt-1 text-base font-semibold">{formatMemberSince(profile.created_at)}</dd>
-                                </div>
-                            </dl>
+            <section className="console-panel console-profile-summary overflow-hidden" aria-label="账户摘要">
+                <div className="flex flex-col gap-5 p-5 sm:flex-row sm:items-start">
+                    <span className="console-profile-avatar flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden text-2xl font-bold text-white">
+                        {avatarUrl ? <img src={avatarUrl} alt={displayName} className="h-full w-full object-cover" /> : avatarInitial}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                            <h2 className="max-w-full truncate text-xl font-bold text-white" title={displayName}>{displayName}</h2>
+                            <span className="console-neutral-chip">{roleLabel}</span>
+                            <span className={`console-status-chip ${profile.status === 'disabled' ? 'is-danger' : 'is-success'}`}>
+                                <span className="console-status-chip-dot" />
+                                {statusLabel}
+                            </span>
                         </div>
+                        <p className="console-muted mt-2 truncate text-sm" title={profile.email}>{profile.email}</p>
                     </div>
                 </div>
+                <dl className="console-summary-grid grid sm:grid-cols-3">
+                    <div className="console-summary-item px-5 py-4">
+                        <dt className="console-muted text-xs font-semibold">账户余额</dt>
+                        <dd className="console-success-text mt-2 text-lg font-bold tabular-nums">{formatBalance(profile.balance)}</dd>
+                    </div>
+                    <div className="console-summary-item px-5 py-4">
+                        <dt className="console-muted text-xs font-semibold">并发额度</dt>
+                        <dd className="mt-2 text-lg font-bold tabular-nums text-white">{profile.concurrency ?? '-'}</dd>
+                    </div>
+                    <div className="console-summary-item px-5 py-4">
+                        <dt className="console-muted text-xs font-semibold">注册时间</dt>
+                        <dd className="mt-2 text-lg font-bold text-white">{formatMemberSince(profile.created_at)}</dd>
+                    </div>
+                </dl>
             </section>
 
-            <section className="border-b border-gray-200 py-8 dark:border-white/[0.08]">
-                <div className="mb-6">
-                    <h2 className="text-base font-semibold text-gray-950 dark:text-white">基本资料</h2>
-                </div>
-                <div className="grid gap-8 md:grid-cols-2 md:gap-0">
-                    <div className="border-b border-gray-200 pb-8 md:border-b-0 md:border-r md:pb-0 md:pr-8 dark:border-white/[0.08]">
-                        <div className="flex items-center gap-2">
-                            <ImageIcon className="h-5 w-5 text-blue-600 dark:text-blue-300" />
-                            <h3 className="text-sm font-semibold">头像</h3>
+            <section aria-labelledby="profile-basic-title">
+                <h2 id="profile-basic-title" className="console-section-title mb-4">基本资料</h2>
+                <div className="console-stagger grid gap-4 xl:grid-cols-2">
+                    <div className="console-panel p-5">
+                        <div className="flex items-center gap-3">
+                            <span className="console-panel-icon">
+                                <ImageIcon className="h-4 w-4" />
+                            </span>
+                            <h3 className="text-sm font-bold text-white">头像</h3>
                         </div>
-                        <div className="mt-4 flex items-center gap-4">
-                            <span className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-blue-500 text-xl font-bold text-white">
+                        <div className="mt-5 flex items-start gap-4">
+                            <span className="console-profile-avatar flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden text-xl font-bold text-white">
                                 {avatarUrl ? <img src={avatarUrl} alt="头像预览" className="h-full w-full object-cover" /> : avatarInitial}
                             </span>
-                            <div className="flex min-w-0 flex-wrap gap-2">
-                                <label className={`flex h-9 cursor-pointer items-center gap-2 rounded-lg border border-gray-300 px-3 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 dark:border-white/[0.12] dark:text-gray-200 dark:hover:bg-white/[0.06] ${avatarProcessing || avatarSaving ? 'pointer-events-none opacity-50' : ''}`}>
+                            <div className="flex min-w-0 flex-1 flex-wrap gap-2">
+                                <label className={`console-button console-button--secondary cursor-pointer focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-cyan-400 ${avatarProcessing || avatarSaving ? 'pointer-events-none opacity-50' : ''}`}>
                                     <ImageIcon className="h-4 w-4" />
                                     {avatarProcessing ? '处理中' : '选择图片'}
-                                    <input type="file" accept="image/*" onChange={(event) => void handleAvatarFileChange(event)} disabled={avatarProcessing || avatarSaving} className="hidden" />
+                                    <input type="file" accept="image/*" onChange={(event) => void handleAvatarFileChange(event)} disabled={avatarProcessing || avatarSaving} className="sr-only" />
                                 </label>
                                 <button
                                     type="button"
                                     onClick={() => void handleAvatarSave()}
                                     disabled={!avatarDraft || avatarProcessing || avatarSaving}
-                                    className="flex h-9 items-center gap-2 rounded-lg bg-blue-600 px-3 text-sm font-semibold text-white transition-colors hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+                                    className="console-button console-button--primary"
                                 >
                                     <CheckIcon className="h-4 w-4" />
                                     {avatarSaving ? '保存中' : '保存'}
@@ -356,62 +349,66 @@ export default function UserProfilePanel({ user, onUserChange, onPasswordChanged
                                     type="button"
                                     onClick={() => void handleAvatarDelete()}
                                     disabled={avatarProcessing || avatarSaving}
-                                    className="flex h-9 items-center gap-2 rounded-lg px-3 text-sm font-medium text-red-600 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:text-red-300 dark:hover:bg-red-500/10"
+                                    className="console-button console-button--ghost-danger"
                                 >
                                     <TrashIcon className="h-4 w-4" />
                                     删除
                                 </button>
                             </div>
                         </div>
-                        <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">支持常见图片格式；GIF 需小于 20 KB，其他大图会自动压缩。</p>
+                        <p className="console-muted mt-4 text-xs leading-5">支持常见图片格式；GIF 需小于 20 KB，其他大图会自动压缩。</p>
                         <div className="mt-4"><NoticeMessage notice={avatarNotice} /></div>
                     </div>
 
-                    <form onSubmit={(event) => void handleUsernameSubmit(event)} className="md:pl-8">
-                        <div className="flex items-center gap-2">
-                            <UserIcon className="h-5 w-5 text-blue-600 dark:text-blue-300" />
-                            <h3 className="text-sm font-semibold">用户名</h3>
+                    <form onSubmit={(event) => void handleUsernameSubmit(event)} className="console-panel p-5">
+                        <div className="flex items-center gap-3">
+                            <span className="console-panel-icon">
+                                <UserIcon className="h-4 w-4" />
+                            </span>
+                            <h3 className="text-sm font-bold text-white">用户名</h3>
                         </div>
-                        <label htmlFor="profile-username" className="mt-4 block text-xs font-medium text-gray-600 dark:text-gray-300">显示名称</label>
+                        <label htmlFor="profile-username" className="console-field-label mt-5 block">显示名称</label>
                         <input
                             id="profile-username"
                             type="text"
                             value={username}
                             onChange={(event) => setUsername(event.target.value)}
                             autoComplete="username"
-                            className="mt-2 h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm text-gray-900 outline-none transition-colors focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15 dark:border-white/[0.12] dark:bg-white/[0.04] dark:text-white"
+                            aria-invalid={usernameNotice?.tone === 'error'}
+                            aria-describedby="profile-username-notice"
+                            className="console-input mt-2"
                         />
                         <div className="mt-4 flex justify-end">
                             <button
                                 type="submit"
                                 disabled={usernameSaving || !username.trim()}
-                                className="flex h-9 items-center gap-2 rounded-lg bg-gray-900 px-3 text-sm font-semibold text-white transition-colors hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
+                                className="console-button console-button--primary"
                             >
                                 <CheckIcon className="h-4 w-4" />
                                 {usernameSaving ? '保存中' : '保存用户名'}
                             </button>
                         </div>
-                        <div className="mt-4"><NoticeMessage notice={usernameNotice} /></div>
+                        <div id="profile-username-notice" className="mt-4"><NoticeMessage notice={usernameNotice} /></div>
                     </form>
                 </div>
             </section>
 
-            <section className="border-b border-gray-200 py-8 dark:border-white/[0.08]">
-                <h2 className="text-base font-semibold text-gray-950 dark:text-white">登录方式</h2>
-                <div className="mt-5 space-y-2">
+            <section className="console-panel overflow-hidden" aria-labelledby="profile-bindings-title">
+                <div className="console-panel-header flex min-h-16 items-center gap-3 px-5 py-3">
+                    <span className="console-panel-icon console-panel-icon--neutral">
+                        <LinkIcon className="h-4 w-4" />
+                    </span>
+                    <h2 id="profile-bindings-title" className="console-panel-title">登录方式</h2>
+                </div>
+                <div className="console-data-list">
                     {authBindings.map((binding) => (
-                        <div key={binding.provider} className="flex min-h-16 items-center justify-between gap-4 rounded-lg border border-gray-200 bg-white px-4 py-3 dark:border-white/[0.08] dark:bg-white/[0.03]">
-                            <div className="flex min-w-0 items-center gap-3">
-                                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-gray-600 dark:bg-white/[0.08] dark:text-gray-300">
-                                    <LinkIcon className="h-4 w-4" />
-                                </span>
-                                <div className="min-w-0">
-                                    <p className="text-sm font-semibold">{AUTH_PROVIDER_LABELS[binding.provider]}</p>
-                                    <p className="mt-0.5 truncate text-xs text-gray-500 dark:text-gray-400">{binding.detail}</p>
-                                </div>
+                        <div key={binding.provider} className="console-data-row flex min-h-[4.5rem] items-center justify-between gap-4 px-5 py-3">
+                            <div className="min-w-0">
+                                <p className="text-sm font-semibold text-white">{AUTH_PROVIDER_LABELS[binding.provider]}</p>
+                                <p className="console-muted mt-1 truncate text-xs" title={binding.detail}>{binding.detail}</p>
                             </div>
-                            <span className={`inline-flex shrink-0 items-center gap-1.5 text-xs font-medium ${binding.bound ? 'text-emerald-700 dark:text-emerald-300' : 'text-gray-500 dark:text-gray-400'}`}>
-                                <span className={`h-1.5 w-1.5 rounded-full ${binding.bound ? 'bg-emerald-500' : 'bg-gray-400'}`} />
+                            <span className={`console-inline-status shrink-0 ${binding.bound ? 'is-success' : ''}`}>
+                                <span className="console-inline-status-dot" />
                                 {binding.bound ? '已绑定' : '未绑定'}
                             </span>
                         </div>
@@ -419,21 +416,23 @@ export default function UserProfilePanel({ user, onUserChange, onPasswordChanged
                 </div>
             </section>
 
-            <section className="py-8">
-                <h2 className="text-base font-semibold text-gray-950 dark:text-white">修改密码</h2>
+            <section className="console-panel p-5" aria-labelledby="profile-password-title">
+                <h2 id="profile-password-title" className="console-panel-title">修改密码</h2>
                 <form onSubmit={(event) => void handlePasswordSubmit(event)} className="mt-5">
-                    <div className="grid gap-4 lg:grid-cols-3">
-                        <label className="block text-xs font-medium text-gray-600 dark:text-gray-300">
+                    <div className="grid gap-4 xl:grid-cols-3">
+                        <label className="console-field-label block">
                             当前密码
                             <input
                                 type="password"
                                 value={oldPassword}
                                 onChange={(event) => setOldPassword(event.target.value)}
                                 autoComplete="current-password"
-                                className="mt-2 h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm text-gray-900 outline-none transition-colors focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15 dark:border-white/[0.12] dark:bg-white/[0.04] dark:text-white"
+                                aria-invalid={passwordNotice?.tone === 'error'}
+                                aria-describedby="profile-password-help profile-password-notice"
+                                className="console-input mt-2"
                             />
                         </label>
-                        <label className="block text-xs font-medium text-gray-600 dark:text-gray-300">
+                        <label className="console-field-label block">
                             新密码
                             <input
                                 type="password"
@@ -441,10 +440,12 @@ export default function UserProfilePanel({ user, onUserChange, onPasswordChanged
                                 onChange={(event) => setNewPassword(event.target.value)}
                                 autoComplete="new-password"
                                 minLength={8}
-                                className="mt-2 h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm text-gray-900 outline-none transition-colors focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15 dark:border-white/[0.12] dark:bg-white/[0.04] dark:text-white"
+                                aria-invalid={passwordNotice?.tone === 'error'}
+                                aria-describedby="profile-password-help profile-password-notice"
+                                className="console-input mt-2"
                             />
                         </label>
-                        <label className="block text-xs font-medium text-gray-600 dark:text-gray-300">
+                        <label className="console-field-label block">
                             确认新密码
                             <input
                                 type="password"
@@ -452,17 +453,19 @@ export default function UserProfilePanel({ user, onUserChange, onPasswordChanged
                                 onChange={(event) => setConfirmPassword(event.target.value)}
                                 autoComplete="new-password"
                                 minLength={8}
-                                className="mt-2 h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm text-gray-900 outline-none transition-colors focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15 dark:border-white/[0.12] dark:bg-white/[0.04] dark:text-white"
+                                aria-invalid={passwordNotice?.tone === 'error'}
+                                aria-describedby="profile-password-help profile-password-notice"
+                                className="console-input mt-2"
                             />
                         </label>
                     </div>
-                    <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">新密码至少 8 个字符。修改后需要重新登录。</p>
+                    <p id="profile-password-help" className="console-muted mt-3 text-xs">新密码至少 8 个字符。修改后需要重新登录。</p>
                     <div className="mt-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                        <div className="min-w-0 flex-1"><NoticeMessage notice={passwordNotice} /></div>
+                        <div id="profile-password-notice" className="min-w-0 flex-1"><NoticeMessage notice={passwordNotice} /></div>
                         <button
                             type="submit"
                             disabled={passwordSaving}
-                            className="flex h-10 shrink-0 items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 text-sm font-semibold text-white transition-colors hover:bg-gray-700 disabled:cursor-wait disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
+                            className="console-button console-button--primary shrink-0"
                         >
                             <CheckIcon className="h-4 w-4" />
                             {passwordSaving ? '修改中' : '修改密码'}
