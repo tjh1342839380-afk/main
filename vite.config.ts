@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import { appendFileSync, mkdirSync, readFileSync } from 'fs'
 import { normalizeDevProxyConfig } from './src/lib/devProxy'
@@ -114,8 +114,10 @@ function logProxyRequest(req: import('http').IncomingMessage, target: string) {
     })
 }
 
-export default defineConfig(({ command }) => {
+export default defineConfig(({ command, mode }) => {
     const devProxyConfig = command === 'serve' && process.env.VITEST !== 'true' ? loadDevProxyConfig() : null
+    const env = loadEnv(mode, '.', '')
+    const authProxyUrl = env.VITE_SUB2API_AUTH_URL?.replace(/\/+$/, '')
 
     return {
         plugins: [react()],
@@ -126,8 +128,18 @@ export default defineConfig(({ command }) => {
         },
         server: {
             host: true,
-            proxy:
-                devProxyConfig?.enabled
+            proxy: {
+                ...(env.VITE_SUB2API_AUTH_PROXY === 'true' && authProxyUrl
+                    ? {
+                        '/sub2api-auth': {
+                            target: authProxyUrl,
+                            changeOrigin: true,
+                            secure: true,
+                            rewrite: (path: string) => path.replace(/^\/sub2api-auth/, ''),
+                        },
+                    }
+                    : {}),
+                ...(devProxyConfig?.enabled
                     ? {
                         [devProxyConfig.prefix]: {
                             target: devProxyConfig.target,
@@ -154,7 +166,8 @@ export default defineConfig(({ command }) => {
                                 ),
                         },
                     }
-                    : undefined,
+                    : {}),
+            },
         },
     }
 })

@@ -266,28 +266,25 @@ body {
   align-items: center;
   justify-content: center;
   padding: max(1rem, var(--safe-area-top)) max(1rem, var(--safe-area-right)) max(1rem, var(--safe-area-bottom)) max(1rem, var(--safe-area-left));
-  background: rgba(226, 232, 240, 0.16);
-  -webkit-backdrop-filter: blur(10px);
-  backdrop-filter: blur(10px);
+  background: rgba(7, 22, 51, 0.22);
+  -webkit-backdrop-filter: blur(14px) saturate(112%);
+  backdrop-filter: blur(14px) saturate(112%);
   animation: landing-auth-overlay-in 180ms ease both;
 }
 
 .landing-auth-modal {
   position: relative;
   width: min(100%, 27rem);
-  border: 1px solid rgba(255, 255, 255, 0.68);
+  max-height: calc(100dvh - 2rem);
+  overflow-y: auto;
+  border: 1px solid #e2e8f0;
   border-radius: 2rem;
-  background:
-    radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.48), transparent 34%),
-    linear-gradient(135deg, rgba(255, 255, 255, 0.36), rgba(255, 255, 255, 0.18) 58%, rgba(226, 232, 240, 0.16));
+  background: #fff;
   padding: 2rem;
   color: #071633;
-  -webkit-backdrop-filter: blur(34px) saturate(190%) contrast(104%);
-  backdrop-filter: blur(34px) saturate(190%) contrast(104%);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.88),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.34),
-    0 24px 70px rgba(15, 23, 42, 0.2);
+    0 24px 70px rgba(15, 23, 42, 0.18),
+    0 4px 12px rgba(15, 23, 42, 0.06);
   animation: landing-auth-modal-in 220ms ease both;
 }
 
@@ -297,10 +294,7 @@ body {
   inset: 1px;
   pointer-events: none;
   border-radius: calc(2rem - 1px);
-  background:
-    linear-gradient(120deg, rgba(255, 255, 255, 0.62), transparent 38%),
-    radial-gradient(190px 70px at 28% 8%, rgba(255, 255, 255, 0.38), transparent 78%);
-  mix-blend-mode: screen;
+  background: transparent;
 }
 
 .landing-auth-modal > * {
@@ -465,6 +459,20 @@ body {
   color: rgba(51, 65, 85, 0.56);
 }
 
+.landing-auth-inline-action {
+  flex-shrink: 0;
+  border: 0;
+  background: transparent;
+  color: #005eff;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.landing-auth-inline-action:disabled {
+  cursor: wait;
+  color: rgba(71, 85, 105, 0.5);
+}
+
 .landing-auth-options {
   display: flex;
   align-items: center;
@@ -505,6 +513,28 @@ body {
   color: transparent;
 }
 
+.landing-auth-error {
+  margin: 0.8rem 0 0;
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-radius: 0.8rem;
+  background: rgba(254, 226, 226, 0.7);
+  padding: 0.65rem 0.75rem;
+  color: #b91c1c;
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.landing-auth-notice {
+  margin: 0.8rem 0 0;
+  border: 1px solid rgba(16, 185, 129, 0.22);
+  border-radius: 0.8rem;
+  background: rgba(209, 250, 229, 0.72);
+  padding: 0.65rem 0.75rem;
+  color: #047857;
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
 .landing-auth-submit {
   width: 100%;
   border: 1px solid rgba(255, 255, 255, 0.66);
@@ -518,6 +548,11 @@ body {
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.74),
     0 14px 26px rgba(37, 99, 235, 0.22);
+}
+
+.landing-auth-submit:disabled {
+  cursor: wait;
+  opacity: 0.65;
 }
 
 .landing-auth-secondary {
@@ -633,7 +668,7 @@ body {
 }
 
 .liquid-glass-header {
-  overflow: hidden;
+  overflow: visible;
   border-bottom-color: rgba(255, 255, 255, 0.34) !important;
   background:
     radial-gradient(circle at 24% 0%, rgba(255, 255, 255, 0.72) 0, rgba(255, 255, 255, 0.22) 23%, transparent 48%),

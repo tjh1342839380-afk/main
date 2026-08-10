@@ -6,7 +6,8 @@ import ViewportTooltip from './ViewportTooltip'
 import HelpModal from './HelpModal'
 import HistoryModal from './HistoryModal'
 import { useFavoriteCollectionTitle } from './FavoriteCollections'
-import { CheckIcon, CloseIcon, EditIcon, HelpCircleIcon, HistoryIcon, ImageIcon, InstallIcon, RefreshIcon, SettingsIcon, VideoIcon } from './icons'
+import { CheckIcon, ChevronDownIcon, CloseIcon, EditIcon, ExternalLinkIcon, HelpCircleIcon, HistoryIcon, ImageIcon, InstallIcon, LayoutDashboardIcon, LogOutIcon, RefreshIcon, SettingsIcon, UserIcon, VideoIcon } from './icons'
+import type { Sub2ApiUser } from '../lib/sub2apiAuth'
 
 type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>
@@ -23,9 +24,12 @@ interface HeaderProps {
   onToggleDynamicBackground: () => void
   staticBackgroundCount: number
   onNextStaticBackground: () => void
+  authUser?: Sub2ApiUser | null
+  onOpenConsole?: () => void
+  onLogout?: () => void
 }
 
-export default function Header({ dynamicBackgroundEnabled, onToggleDynamicBackground, staticBackgroundCount, onNextStaticBackground }: HeaderProps) {
+export default function Header({ dynamicBackgroundEnabled, onToggleDynamicBackground, staticBackgroundCount, onNextStaticBackground, authUser, onOpenConsole, onLogout }: HeaderProps) {
   const appMode = useStore((s) => s.appMode)
   const setAppMode = useStore((s) => s.setAppMode)
   const setShowSettings = useStore((s) => s.setShowSettings)
@@ -43,12 +47,15 @@ export default function Header({ dynamicBackgroundEnabled, onToggleDynamicBackgr
   const [isPwaInstalled, setIsPwaInstalled] = useState(isInstalledPwa)
   const [scrollDirection, setScrollDirection] = useState<'up' | 'down'>('up')
   const [showHistoryModal, setShowHistoryModal] = useState(false)
+  const [showAccountMenu, setShowAccountMenu] = useState(false)
   const [titleEditorOpen, setTitleEditorOpen] = useState(false)
   const [titleDraft, setTitleDraft] = useState('')
   const historyButtonRef = useRef<HTMLButtonElement>(null)
   const titleEditorRef = useRef<HTMLDivElement>(null)
   const titleButtonRef = useRef<HTMLButtonElement>(null)
   const titleInputRef = useRef<HTMLInputElement>(null)
+  const accountButtonRef = useRef<HTMLButtonElement>(null)
+  const accountMenuRef = useRef<HTMLDivElement>(null)
   const createConversation = useStore((s) => s.createAgentConversation)
 
   useEffect(() => {
@@ -95,6 +102,28 @@ export default function Header({ dynamicBackgroundEnabled, onToggleDynamicBackgr
     })
     return () => window.cancelAnimationFrame(frame)
   }, [titleEditorOpen])
+
+  useEffect(() => {
+    if (!showAccountMenu) return
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node
+      if (accountMenuRef.current?.contains(target) || accountButtonRef.current?.contains(target)) return
+      setShowAccountMenu(false)
+    }
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      setShowAccountMenu(false)
+      accountButtonRef.current?.focus()
+    }
+
+    document.addEventListener('pointerdown', handlePointerDown)
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [showAccountMenu])
 
   useEffect(() => {
     if (!titleEditorOpen) return
@@ -394,6 +423,92 @@ export default function Header({ dynamicBackgroundEnabled, onToggleDynamicBackgr
                 设置
               </ViewportTooltip>
             </div>
+            {onLogout && (
+              <div className="relative">
+                <button
+                  ref={accountButtonRef}
+                  type="button"
+                  onClick={() => {
+                    dismissAllTooltips()
+                    setShowAccountMenu((visible) => !visible)
+                  }}
+                  className={`group flex max-w-10 items-center gap-1.5 rounded-xl px-1.5 py-1.5 text-xs font-semibold transition-colors sm:max-w-56 sm:px-2 ${showAccountMenu ? 'bg-blue-50 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-900 dark:hover:text-white'}`}
+                  aria-label="账户菜单"
+                  aria-haspopup="menu"
+                  aria-expanded={showAccountMenu}
+                  aria-controls="header-account-menu"
+                  title={authUser ? `账户菜单：${authUser.email}` : '账户菜单'}
+                >
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-cyan-400 text-white shadow-sm">
+                    <UserIcon className="h-4 w-4" />
+                  </span>
+                  <span className="hidden min-w-0 truncate sm:block">{authUser?.username || authUser?.email || '账户'}</span>
+                  <ChevronDownIcon className={`hidden h-3.5 w-3.5 shrink-0 transition-transform sm:block ${showAccountMenu ? 'rotate-180' : ''}`} />
+                </button>
+
+                {showAccountMenu && (
+                  <div
+                    ref={accountMenuRef}
+                    id="header-account-menu"
+                    role="menu"
+                    aria-label="账户菜单"
+                    className="animate-dropdown-down absolute right-0 top-[calc(100%+0.65rem)] z-50 w-[min(18rem,calc(100vw-1.5rem))] overflow-hidden rounded-xl border border-white/80 bg-white/95 p-1.5 text-gray-800 shadow-[0_18px_50px_rgba(15,23,42,0.18)] backdrop-blur-xl dark:border-white/[0.10] dark:bg-gray-950/95 dark:text-gray-100 dark:shadow-[0_18px_50px_rgba(0,0,0,0.45)]"
+                  >
+                    <div className="border-b border-gray-200/80 px-3 py-2.5 dark:border-white/[0.08]">
+                      <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-gray-400 dark:text-gray-500">当前账户</p>
+                      <p className="mt-1 truncate text-sm font-semibold text-gray-800 dark:text-gray-100">{authUser?.email || '已登录账户'}</p>
+                    </div>
+                    <div className="py-1">
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          setShowAccountMenu(false)
+                          onOpenConsole?.()
+                        }}
+                        className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-gray-700 transition-colors hover:bg-blue-50 hover:text-blue-700 dark:text-gray-200 dark:hover:bg-blue-500/15 dark:hover:text-blue-200"
+                      >
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-500/15 dark:text-blue-300">
+                          <LayoutDashboardIcon className="h-4 w-4" />
+                        </span>
+                        <span className="min-w-0 flex-1">控制台</span>
+                        <ExternalLinkIcon className="h-3.5 w-3.5 text-gray-400 dark:text-gray-500" />
+                      </button>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          setShowAccountMenu(false)
+                          setShowSettings(true)
+                        }}
+                        className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-white/[0.08]"
+                      >
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-gray-600 dark:bg-white/[0.08] dark:text-gray-300">
+                          <SettingsIcon className="h-4 w-4" />
+                        </span>
+                        <span className="min-w-0 flex-1">设置</span>
+                      </button>
+                    </div>
+                    <div className="border-t border-gray-200/80 pt-1 dark:border-white/[0.08]">
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          setShowAccountMenu(false)
+                          onLogout()
+                        }}
+                        className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-red-600 transition-colors hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-500/10"
+                      >
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-red-50 text-red-500 dark:bg-red-500/10 dark:text-red-300">
+                          <LogOutIcon className="h-4 w-4" />
+                        </span>
+                        <span className="min-w-0 flex-1">退出登录</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
         <div className={`safe-area-x sm:hidden overflow-hidden transition-all duration-300 ease-in-out ${appMode === 'gallery' && scrollDirection === 'down' ? 'max-h-0 opacity-0 pb-0' : 'max-h-20 opacity-100 pb-2'}`}>

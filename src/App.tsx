@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import { initStore } from './store'
 import { useStore } from './store'
 import { activateFirstImportedProfile, buildSettingsFromUrlParams, clearUrlSettingParams, hasUrlSettingParams } from './lib/urlSettings'
-import { isDefaultConfigOnlyEnabled, mergeImportedSettings } from './lib/apiProfiles'
+import { getActiveApiProfile, isDefaultConfigOnlyEnabled, mergeImportedSettings, normalizeSettings } from './lib/apiProfiles'
+import { ensureSub2ApiImageKey, getSub2ApiConsoleUrl, getSub2ApiGatewayBaseUrl, getSub2ApiSession } from './lib/sub2apiAuth'
+import { useSub2ApiAuth } from './hooks/useSub2ApiAuth'
 import { getCustomProviderConfigUrl, loadCustomProviderSettingsFromUrl } from './lib/customProviderConfigUrl'
 import { useDockerApiUrlMigrationNotice } from './hooks/useDockerApiUrlMigrationNotice'
 import type { AppSettings } from './types'
@@ -74,15 +76,61 @@ export default function App() {
   const filterFavorite = useStore((s) => s.filterFavorite)
   const activeFavoriteCollectionId = useStore((s) => s.activeFavoriteCollectionId)
   const [dynamicBackgroundEnabled, setDynamicBackgroundEnabled] = useState(getInitialDynamicBackgroundEnabled)
-  const [hasEnteredExperience, setHasEnteredExperience] = useState(false)
+  const [hasEnteredExperience, setHasEnteredExperience] = useState(() => Boolean(getSub2ApiSession()))
   const [landingAuthMode, setLandingAuthMode] = useState<LandingAuthMode | null>(null)
   const [staticBackgroundManualOffset, setStaticBackgroundManualOffset] = useState(0)
   const [staticBackgroundImages, setStaticBackgroundImages] = useState<string[]>([DEFAULT_STATIC_BACKGROUND_URL])
   const dynamicBackgroundVideoRef = useRef<HTMLVideoElement>(null)
+  const apiKeySyncStarted = useRef(false)
+  const sub2ApiAuth = useSub2ApiAuth()
   const staticBackgroundUrl = staticBackgroundImages[staticBackgroundManualOffset % staticBackgroundImages.length] ?? DEFAULT_STATIC_BACKGROUND_URL
   const showDynamicBackground = hasEnteredExperience && dynamicBackgroundEnabled
+  const openSub2ApiConsole = () => {
+    const consoleUrl = getSub2ApiConsoleUrl()
+    if (!consoleUrl) return
+    window.open(consoleUrl, '_blank', 'noopener,noreferrer')
+  }
   useDockerApiUrlMigrationNotice()
   useGlobalClickSuppression()
+
+  useEffect(() => {
+    if (sub2ApiAuth.isAuthenticated) {
+      setHasEnteredExperience(true)
+      return
+    }
+
+    if (!sub2ApiAuth.isRestoring) setHasEnteredExperience(false)
+  }, [sub2ApiAuth.isAuthenticated, sub2ApiAuth.isRestoring])
+
+  useEffect(() => {
+    if (!sub2ApiAuth.isAuthenticated || apiKeySyncStarted.current) return
+    if (import.meta.env.VITE_SUB2API_AUTO_CONFIGURE !== 'true') return
+
+    const settings = normalizeSettings(useStore.getState().settings)
+    const profile = getActiveApiProfile(settings)
+    const gatewayBaseUrl = getSub2ApiGatewayBaseUrl()
+    const normalizedGatewayBaseUrl = gatewayBaseUrl.replace(/\/+$/, '')
+    const isSub2ApiProfile = [profile.baseUrl, settings.baseUrl]
+      .some((url) => url.replace(/\/+$/, '') === normalizedGatewayBaseUrl)
+    if (profile.provider !== 'openai' || profile.apiKey || !isSub2ApiProfile) return
+
+    apiKeySyncStarted.current = true
+    void ensureSub2ApiImageKey()
+      .then((apiKey) => {
+        const latest = normalizeSettings(useStore.getState().settings)
+        const activeProfile = getActiveApiProfile(latest)
+        if (activeProfile.provider !== 'openai' || activeProfile.apiKey) return
+
+        const profiles = latest.profiles.map((item) => item.id === activeProfile.id
+          ? { ...item, baseUrl: gatewayBaseUrl, apiKey }
+          : item)
+        useStore.getState().setSettings({ profiles, activeProfileId: activeProfile.id })
+      })
+      .catch((error) => {
+        apiKeySyncStarted.current = false
+        console.warn('Sub2API API Key 自动配置失败：', error)
+      })
+  }, [sub2ApiAuth.isAuthenticated])
 
   useEffect(() => {
     const searchParams = new URLSearchParams(window.location.search)
@@ -238,7 +286,13 @@ export default function App() {
                 <button
                   type="button"
                   className="landing-start-button"
-                  onClick={() => setHasEnteredExperience(true)}
+                  onClick={() => {
+                    if (sub2ApiAuth.isAuthenticated) {
+                      setHasEnteredExperience(true)
+                      return
+                    }
+                    setLandingAuthMode('login')
+                  }}
                 >
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
                     <path d="M12 3l1.7 4.6L18 9.3l-4.3 1.7L12 16l-1.7-5L6 9.3l4.3-1.7L12 3z" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
@@ -279,7 +333,7 @@ export default function App() {
                     <path d="M12 3l7 3v5c0 4.5-2.8 8.4-7 10-4.2-1.6-7-5.5-7-10V6l7-3z" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                     <path d="M9 12l2 2 4-4" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
-                  API Key 加密保存
+                  API Key 与登录凭证分离
                 </span>
               </div>
             </div>
@@ -296,6 +350,13 @@ export default function App() {
               onToggleDynamicBackground={() => setDynamicBackgroundEnabled((enabled) => !enabled)}
               staticBackgroundCount={staticBackgroundImages.length}
               onNextStaticBackground={() => setStaticBackgroundManualOffset((offset) => offset + 1)}
+              authUser={sub2ApiAuth.user}
+              onOpenConsole={openSub2ApiConsole}
+              onLogout={sub2ApiAuth.isAuthenticated ? () => {
+                void sub2ApiAuth.logout().catch((error) => {
+                  console.warn('退出 Sub2API 登录失败：', error)
+                })
+              } : undefined}
             />
             {appMode === 'agent' ? (
               <AgentWorkspace />
