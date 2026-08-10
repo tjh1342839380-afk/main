@@ -4,11 +4,12 @@ import { useCloseOnEscape } from '../hooks/useCloseOnEscape'
 import { usePreventBackgroundScroll } from '../hooks/usePreventBackgroundScroll'
 import { APP_SHORT_NAME } from '../lib/brand'
 import { listSub2ApiKeys, type Sub2ApiApiKey, type Sub2ApiUser } from '../lib/sub2apiAuth'
-import { ChartBarIcon, ChevronLeftIcon, CodeIcon, LayoutDashboardIcon, LogOutIcon, RefreshIcon, SettingsIcon, UserIcon } from './icons'
+import { ChartBarIcon, ChevronLeftIcon, KeyIcon, LayoutDashboardIcon, LogOutIcon, SettingsIcon, UserIcon } from './icons'
+import UserApiKeysPanel from './UserApiKeysPanel'
 import UserDashboardPanel from './UserDashboardPanel'
 import UserProfilePanel from './UserProfilePanel'
 
-type ConsoleSection = 'overview' | 'dashboard' | 'profile'
+type ConsoleSection = 'overview' | 'dashboard' | 'apiKeys' | 'profile'
 
 interface UserConsoleProps {
     user: Sub2ApiUser
@@ -20,6 +21,7 @@ interface UserConsoleProps {
 const CONSOLE_SECTIONS = [
     { id: 'overview', label: '账户概览', compactLabel: '概览', icon: LayoutDashboardIcon },
     { id: 'dashboard', label: '用量仪表盘', compactLabel: '数据', icon: ChartBarIcon },
+    { id: 'apiKeys', label: 'API 密钥', compactLabel: '密钥', icon: KeyIcon },
     { id: 'profile', label: '个人资料', compactLabel: '资料', icon: UserIcon },
 ] as const
 
@@ -179,6 +181,8 @@ export default function UserConsole({ user, onUserChange, onClose, onLogout }: U
                 <div className="safe-area-x relative z-[1] mx-auto w-full max-w-7xl pb-[calc(2rem+var(--safe-area-bottom))] pt-6 sm:pt-8 lg:px-8 lg:pb-10 lg:pt-10">
                     {activeSection === 'dashboard' ? (
                         <UserDashboardPanel user={user} onUserChange={onUserChange} />
+                    ) : activeSection === 'apiKeys' ? (
+                        <UserApiKeysPanel onKeysChanged={loadKeys} />
                     ) : activeSection === 'profile' ? (
                         <UserProfilePanel
                             user={user}
@@ -227,65 +231,6 @@ export default function UserConsole({ user, onUserChange, onClose, onLogout }: U
                                     </article>
                                 ))}
                             </section>
-
-                            <section className="console-panel overflow-hidden" aria-labelledby="console-api-keys-title">
-                                <div className="console-panel-header flex min-h-16 items-center justify-between gap-4 px-5 py-3">
-                                    <div className="flex min-w-0 items-center gap-3">
-                                        <span className="console-panel-icon">
-                                            <CodeIcon className="h-4 w-4" />
-                                        </span>
-                                        <div className="min-w-0">
-                                            <h2 id="console-api-keys-title" className="console-panel-title">API Key</h2>
-                                            <p className="console-muted mt-1 text-xs">共 {isLoading ? '-' : keys.length} 个</p>
-                                        </div>
-                                    </div>
-                                    <button
-                                        type="button"
-                                        onClick={() => void loadKeys()}
-                                        disabled={isLoading}
-                                        className="console-icon-button"
-                                        aria-label="刷新 API Key"
-                                        title="刷新 API Key"
-                                    >
-                                        <RefreshIcon className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-                                    </button>
-                                </div>
-
-                                <div className="min-h-28" aria-live="polite">
-                                    {isLoading ? (
-                                        <div className="space-y-3 p-5">
-                                            {[0, 1].map((item) => (
-                                                <div key={item} className="console-skeleton h-14 rounded-lg" />
-                                            ))}
-                                        </div>
-                                    ) : error ? (
-                                        <div className="console-message console-message--danger m-5 flex min-h-28 flex-col items-start justify-center gap-3 px-4 py-3 text-sm">
-                                            <p>{error}</p>
-                                            <button type="button" onClick={() => void loadKeys()} className="console-text-action min-h-11 font-semibold">重新加载</button>
-                                        </div>
-                                    ) : keys.length === 0 ? (
-                                        <div className="console-empty m-5 flex min-h-28 items-center justify-center px-4 text-center text-sm">
-                                            暂无 API Key
-                                        </div>
-                                    ) : (
-                                        <div className="console-data-list">
-                                            {keys.map((item) => (
-                                                <div key={item.id} className="console-data-row grid min-h-[4.5rem] grid-cols-[minmax(0,1fr)_auto] items-center gap-4 px-5 py-3">
-                                                    <div className="min-w-0">
-                                                        <p className="truncate text-sm font-semibold text-white">{item.name || '未命名 Key'}</p>
-                                                        <p className="console-muted mt-1 font-mono text-xs">{typeof item.key === 'string' && item.key ? `...${item.key.slice(-4)}` : '未返回 Key'}</p>
-                                                    </div>
-                                                    <span className={`console-inline-status ${item.status === 'active' ? 'is-success' : ''}`}>
-                                                        <span className="console-inline-status-dot" />
-                                                        {item.status === 'active' ? '可用' : '已停用'}
-                                                    </span>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-                            </section>
-
                         </div>
                     )}
                 </div>

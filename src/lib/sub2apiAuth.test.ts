@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   changeSub2ApiPassword,
   clearSub2ApiSession,
+  createSub2ApiKey,
   ensureSub2ApiImageKey,
   getCurrentSub2ApiUser,
   getSub2ApiDashboardModels,
@@ -357,6 +358,60 @@ describe('sub2apiAuth', () => {
       '/sub2api-auth/keys?page=1&page_size=20',
       expect.objectContaining({ credentials: 'include' }),
     )
+  })
+
+  it('loads a filtered API key page with pagination metadata', async () => {
+    window.sessionStorage.setItem('sub2api_access_token', 'access-token')
+    const page = {
+      items: [{ id: 21, key: 'sk-workbench', name: '工作台密钥', status: 'active' }],
+      total: 24,
+      page: 3,
+      page_size: 10,
+      pages: 3,
+    }
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse({
+      code: 0,
+      data: page,
+    }))
+
+    await expect(listSub2ApiKeys({
+      page: 3,
+      pageSize: 10,
+      search: '工作台 key',
+      status: 'active',
+    })).resolves.toEqual(page)
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      'https://auth.example.com/api/v1/keys?page=3&page_size=10&search=%E5%B7%A5%E4%BD%9C%E5%8F%B0+key&status=active',
+    )
+    const request = fetchMock.mock.calls[0]?.[1] as RequestInit
+    expect(request.method ?? 'GET').toBe('GET')
+    expect(request.credentials).toBe('include')
+    const headers = new Headers(request.headers)
+    expect(headers.get('Authorization')).toBe('Bearer access-token')
+    expect(headers.get('Accept')).toBe('application/json')
+  })
+
+  it('creates an API key with the requested name', async () => {
+    window.sessionStorage.setItem('sub2api_access_token', 'access-token')
+    const key = { id: 3, key: 'sk-workbench', name: '工作台密钥', status: 'active' }
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse({
+      code: 0,
+      data: key,
+    }))
+
+    await expect(createSub2ApiKey('工作台密钥')).resolves.toEqual(key)
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://auth.example.com/api/v1/keys',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ name: '工作台密钥' }),
+        credentials: 'include',
+      }),
+    )
+    const headers = new Headers((fetchMock.mock.calls[0]?.[1] as RequestInit).headers)
+    expect(headers.get('Authorization')).toBe('Bearer access-token')
+    expect(headers.get('Accept')).toBe('application/json')
+    expect(headers.get('Content-Type')).toBe('application/json')
   })
 
   it('creates an OmniMuse API key when no active key exists', async () => {

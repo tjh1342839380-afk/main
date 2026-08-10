@@ -68,6 +68,24 @@ export function UserIcon(props: SVGProps<SVGSVGElement>) {
   )
 }
 
+export function KeyIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" {...props}>
+      <circle cx="8" cy="15" r="4" strokeWidth="1.8" />
+      <path d="M11 12l8-8M16 7l2 2M14 9l2 2" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+export function SearchIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" {...props}>
+      <circle cx="11" cy="11" r="7" strokeWidth="1.8" />
+      <path d="M16 16l4 4" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  )
+}
+
 export function LayoutDashboardIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" {...props}>

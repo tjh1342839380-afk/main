@@ -125,6 +125,21 @@ export interface Sub2ApiApiKey {
   status: string
 }
 
+export interface Sub2ApiApiKeyListOptions {
+  page?: number
+  pageSize?: number
+  search?: string
+  status?: string
+}
+
+export interface Sub2ApiApiKeyListResult {
+  items?: Sub2ApiApiKey[]
+  total?: number
+  page?: number
+  page_size?: number
+  pages?: number
+}
+
 export interface Sub2ApiDashboardStats {
   total_api_keys: number
   active_api_keys: number
@@ -614,8 +629,15 @@ export async function getSub2ApiPublicSettings() {
   return requestRaw<Sub2ApiPublicSettings>('/settings/public')
 }
 
-export async function listSub2ApiKeys() {
-  return requestWithSessionRefresh<{ items?: Sub2ApiApiKey[] }>('/keys?page=1&page_size=20')
+export async function listSub2ApiKeys(options: Sub2ApiApiKeyListOptions = {}) {
+  const params = new URLSearchParams({
+    page: String(options.page ?? 1),
+    page_size: String(options.pageSize ?? 20),
+  })
+  const search = options.search?.trim()
+  if (search) params.set('search', search)
+  if (options.status) params.set('status', options.status)
+  return requestWithSessionRefresh<Sub2ApiApiKeyListResult>(`/keys?${params.toString()}`)
 }
 
 export async function createSub2ApiKey(name = APP_SHORT_NAME) {
@@ -627,7 +649,7 @@ export async function createSub2ApiKey(name = APP_SHORT_NAME) {
 
 export async function ensureSub2ApiImageKey() {
   const result = await listSub2ApiKeys()
-  const existing = result.items?.find((item) => item.status === 'active' && item.key.trim())
+  const existing = result.items?.find((item) => item.status === 'active' && typeof item.key === 'string' && item.key.trim())
   if (existing) return existing.key
 
   const created = await createSub2ApiKey()
