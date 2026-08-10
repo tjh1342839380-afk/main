@@ -79,6 +79,14 @@ export function LayoutDashboardIcon(props: SVGProps<SVGSVGElement>) {
   )
 }
 
+export function ChartBarIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" {...props}>
+      <path d="M4 20V10M10 20V4M16 20v-7M22 20H2" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
 export function ExternalLinkIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" {...props}>

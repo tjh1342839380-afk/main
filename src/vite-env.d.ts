@@ -6,7 +6,6 @@ declare const __DEV_PROXY_CONFIG__: unknown
 interface ImportMetaEnv {
   readonly VITE_DEFAULT_API_URL?: string
   readonly VITE_SUB2API_AUTH_URL?: string
-  readonly VITE_SUB2API_CONSOLE_URL?: string
   readonly VITE_SUB2API_AUTH_PROXY?: string
   readonly VITE_SUB2API_AUTO_CONFIGURE?: string
   readonly VITE_API_PROXY_AVAILABLE?: string

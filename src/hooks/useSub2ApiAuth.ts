@@ -101,6 +101,11 @@ export function useSub2ApiAuth() {
     return response
   }, [])
 
+  const sync = useCallback(() => {
+    setSession(getSub2ApiSession())
+    notifyAuthChange()
+  }, [])
+
   return {
     session,
     user: session?.user ?? null,
@@ -111,5 +116,6 @@ export function useSub2ApiAuth() {
     login2FA,
     logout,
     refresh,
+    sync,
   }
 }

@@ -16,6 +16,12 @@ VITE_SUB2API_AUTO_CONFIGURE=true
 
 启用 `VITE_SUB2API_AUTH_PROXY` 后，浏览器请求同源 `/sub2api-auth/*`，避免依赖 Sub2API 的跨域配置。登录后如果当前默认 OpenAI 配置还没有 API Key，应用会复用该用户已有的有效 Key；没有可用 Key 时会创建名为 `GPT Image 2 For TJH` 的 Key。
 
+## 项目内用户控制台
+
+登录后的账户菜单会在当前站点打开 `#console`，展示账户概览、用量仪表盘、个人资料、API Key 状态和应用设置入口。用量仪表盘读取 Sub2API 官方普通用户统计接口，展示余额、请求与 Token 消耗、模型分布、趋势和最近调用记录。控制台不会再根据 `VITE_SUB2API_AUTH_URL` 推导或跳转到第三方 Sub2API 网站。
+
+这个页面是本项目自己的用户控制台前端，账户和 API Key 数据仍通过同源 `/sub2api-auth/*` 代理读取配置的 Sub2API 服务。若需要完全自有的后台服务，需要把 Sub2API、PostgreSQL 和 Redis 部署到自己的服务器与域名，再更新 `VITE_DEFAULT_API_URL`、`VITE_SUB2API_AUTH_URL` 和服务端 `SUB2API_AUTH_URL`。官方 Sub2API 自带完整用户与管理控制台，自托管后的用户首页路由为 `/dashboard`。
+
 ## Cloudflare Pages
 
 `functions/sub2api-auth/[[path]].ts` 默认连接 `https://sub2api.toioto.org/api/v1`。`worker.ts` 会在 Cloudflare Workers 部署中将 `/sub2api-auth/*` 路由到该代理；切换后台时配置：
@@ -24,7 +30,7 @@ VITE_SUB2API_AUTO_CONFIGURE=true
 SUB2API_AUTH_URL=https://sub2api.example.com/api/v1
 ```
 
-代理只允许 `/auth/*`、`/keys*` 和只读的 `/settings/public` 路径，不接受浏览器传入动态目标地址。注册页通过公开设置同步邮箱验证和邀请码开关。
+代理只允许 `/auth/*`、`/keys*`、只读的 `/settings/public`，精确匹配的 `/user/profile`、`/user`、`/user/password`，以及仪表盘所需的 `/usage`、`/usage/dashboard/stats`、`/usage/dashboard/trend`、`/usage/dashboard/models` 路径，不接受浏览器传入动态目标地址。个人资料页通过用户路径读取和更新资料、修改密码；注册页通过公开设置同步邮箱验证和邀请码开关。
 
 ## 邮箱验证码
 

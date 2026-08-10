@@ -6,7 +6,7 @@ import ViewportTooltip from './ViewportTooltip'
 import HelpModal from './HelpModal'
 import HistoryModal from './HistoryModal'
 import { useFavoriteCollectionTitle } from './FavoriteCollections'
-import { CheckIcon, ChevronDownIcon, CloseIcon, EditIcon, ExternalLinkIcon, HelpCircleIcon, HistoryIcon, ImageIcon, InstallIcon, LayoutDashboardIcon, LogOutIcon, RefreshIcon, SettingsIcon, UserIcon, VideoIcon } from './icons'
+import { CheckIcon, ChevronDownIcon, ChevronRightIcon, CloseIcon, EditIcon, HelpCircleIcon, HistoryIcon, ImageIcon, InstallIcon, LayoutDashboardIcon, LogOutIcon, RefreshIcon, UserIcon, VideoIcon } from './icons'
 import type { Sub2ApiUser } from '../lib/sub2apiAuth'
 
 type BeforeInstallPromptEvent = Event & {
@@ -32,7 +32,6 @@ interface HeaderProps {
 export default function Header({ dynamicBackgroundEnabled, onToggleDynamicBackground, staticBackgroundCount, onNextStaticBackground, authUser, onOpenConsole, onLogout }: HeaderProps) {
   const appMode = useStore((s) => s.appMode)
   const setAppMode = useStore((s) => s.setAppMode)
-  const setShowSettings = useStore((s) => s.setShowSettings)
   const setConfirmDialog = useStore((s) => s.setConfirmDialog)
   const agentConversations = useStore((s) => s.agentConversations)
   const activeAgentConversationId = useStore((s) => s.activeAgentConversationId)
@@ -142,7 +141,6 @@ export default function Header({ dynamicBackgroundEnabled, onToggleDynamicBackgr
   const backgroundTooltip = useTooltip()
   const nextBackgroundTooltip = useTooltip()
   const helpTooltip = useTooltip()
-  const settingsTooltip = useTooltip()
 
   useEffect(() => {
     const handleBeforeInstallPrompt = (event: Event) => {
@@ -408,21 +406,6 @@ export default function Header({ dynamicBackgroundEnabled, onToggleDynamicBackgr
                 操作指南
               </ViewportTooltip>
             </div>
-            <div
-              className="relative"
-              {...settingsTooltip.handlers}
-            >
-              <button
-                onClick={() => setShowSettings(true)}
-                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-900 transition-colors"
-                aria-label="设置"
-              >
-                <SettingsIcon className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-              </button>
-              <ViewportTooltip visible={settingsTooltip.visible} className="whitespace-nowrap">
-                设置
-              </ViewportTooltip>
-            </div>
             {onLogout && (
               <div className="relative">
                 <button
@@ -439,8 +422,12 @@ export default function Header({ dynamicBackgroundEnabled, onToggleDynamicBackgr
                   aria-controls="header-account-menu"
                   title={authUser ? `账户菜单：${authUser.email}` : '账户菜单'}
                 >
-                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-cyan-400 text-white shadow-sm">
-                    <UserIcon className="h-4 w-4" />
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-gradient-to-br from-blue-500 to-cyan-400 text-white shadow-sm">
+                    {authUser?.avatar_url ? (
+                      <img src={authUser.avatar_url} alt="" className="h-full w-full object-cover" />
+                    ) : (
+                      <UserIcon className="h-4 w-4" />
+                    )}
                   </span>
                   <span className="hidden min-w-0 truncate sm:block">{authUser?.username || authUser?.email || '账户'}</span>
                   <ChevronDownIcon className={`hidden h-3.5 w-3.5 shrink-0 transition-transform sm:block ${showAccountMenu ? 'rotate-180' : ''}`} />
@@ -472,21 +459,7 @@ export default function Header({ dynamicBackgroundEnabled, onToggleDynamicBackgr
                           <LayoutDashboardIcon className="h-4 w-4" />
                         </span>
                         <span className="min-w-0 flex-1">控制台</span>
-                        <ExternalLinkIcon className="h-3.5 w-3.5 text-gray-400 dark:text-gray-500" />
-                      </button>
-                      <button
-                        type="button"
-                        role="menuitem"
-                        onClick={() => {
-                          setShowAccountMenu(false)
-                          setShowSettings(true)
-                        }}
-                        className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-white/[0.08]"
-                      >
-                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-gray-600 dark:bg-white/[0.08] dark:text-gray-300">
-                          <SettingsIcon className="h-4 w-4" />
-                        </span>
-                        <span className="min-w-0 flex-1">设置</span>
+                        <ChevronRightIcon className="h-3.5 w-3.5 text-gray-400 dark:text-gray-500" />
                       </button>
                     </div>
                     <div className="border-t border-gray-200/80 pt-1 dark:border-white/[0.08]">

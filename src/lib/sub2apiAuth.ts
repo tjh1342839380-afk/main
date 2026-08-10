@@ -1,10 +1,77 @@
+export type Sub2ApiAuthProvider = 'email' | 'linuxdo' | 'oidc' | 'wechat' | 'github' | 'google' | 'dingtalk'
+
+export interface Sub2ApiUserAuthBindingStatus {
+  bound?: boolean
+  bound_count?: number
+  provider?: Sub2ApiAuthProvider | string
+  provider_key?: string | null
+  provider_subject?: string | null
+  issuer?: string | null
+  label?: string | null
+  provider_label?: string | null
+  display_name?: string | null
+  subject_hint?: string | null
+  verified_at?: string | null
+  bind_start_path?: string | null
+  can_bind?: boolean
+  can_unbind?: boolean
+  note_key?: string | null
+  note?: string | null
+  metadata?: Record<string, unknown>
+}
+
+export interface Sub2ApiUserProfileSourceContext {
+  provider?: Sub2ApiAuthProvider | string
+  source?: string | null
+  label?: string | null
+  provider_label?: string | null
+}
+
+export interface Sub2ApiNotifyEmailEntry {
+  email: string
+  disabled: boolean
+  verified: boolean
+}
+
 export interface Sub2ApiUser {
   id: number
   username?: string
   email: string
+  avatar_url?: string | null
+  avatar_source?: string | Sub2ApiUserProfileSourceContext | null
+  username_source?: string | Sub2ApiUserProfileSourceContext | null
+  display_name_source?: string | Sub2ApiUserProfileSourceContext | null
+  nickname_source?: string | Sub2ApiUserProfileSourceContext | null
+  profile_sources?: {
+    avatar?: string | Sub2ApiUserProfileSourceContext | null
+    username?: string | Sub2ApiUserProfileSourceContext | null
+    display_name?: string | Sub2ApiUserProfileSourceContext | null
+    nickname?: string | Sub2ApiUserProfileSourceContext | null
+  }
+  identities?: Partial<Record<Sub2ApiAuthProvider, Sub2ApiUserAuthBindingStatus>>
+  auth_bindings?: Partial<Record<Sub2ApiAuthProvider, boolean | Sub2ApiUserAuthBindingStatus>>
+  identity_bindings?: Partial<Record<Sub2ApiAuthProvider, boolean | Sub2ApiUserAuthBindingStatus>>
+  email_bound?: boolean
+  linuxdo_bound?: boolean
+  oidc_bound?: boolean
+  wechat_bound?: boolean
+  dingtalk_bound?: boolean
   role?: 'admin' | 'user' | string
   status?: 'active' | 'disabled' | string
   balance?: number
+  frozen_balance?: number
+  concurrency?: number
+  rpm_limit?: number
+  allowed_groups?: number[] | null
+  balance_notify_enabled?: boolean
+  balance_notify_threshold_type?: string
+  balance_notify_threshold?: number | null
+  balance_notify_extra_emails?: Sub2ApiNotifyEmailEntry[]
+  total_recharged?: number
+  last_active_at?: string | null
+  created_at?: string
+  updated_at?: string
+  deleted_at?: string | null
 }
 
 export interface Sub2ApiAuthResponse {
@@ -32,6 +99,16 @@ export interface Sub2ApiTwoFactorInput {
   totp_code: string
 }
 
+export interface Sub2ApiProfileUpdateInput {
+  username?: string
+  avatar_url?: string | null
+}
+
+export interface Sub2ApiPasswordChangeInput {
+  old_password: string
+  new_password: string
+}
+
 export interface Sub2ApiSession {
   accessToken: string
   refreshToken: string | null
@@ -44,6 +121,150 @@ export interface Sub2ApiApiKey {
   key: string
   name: string
   status: string
+}
+
+export interface Sub2ApiDashboardStats {
+  total_api_keys: number
+  active_api_keys: number
+  total_requests: number
+  total_input_tokens: number
+  total_output_tokens: number
+  total_cache_creation_tokens: number
+  total_cache_read_tokens: number
+  total_tokens: number
+  total_cost: number
+  total_actual_cost: number
+  today_requests: number
+  today_input_tokens: number
+  today_output_tokens: number
+  today_cache_creation_tokens: number
+  today_cache_read_tokens: number
+  today_tokens: number
+  today_cost: number
+  today_actual_cost: number
+  average_duration_ms: number
+  rpm: number
+  tpm: number
+  by_platform?: Array<{
+    platform: string
+    total_requests: number
+    total_tokens: number
+    total_actual_cost: number
+    today_requests: number
+    today_tokens: number
+    today_actual_cost: number
+  }>
+}
+
+export interface Sub2ApiTrendPoint {
+  date: string
+  requests: number
+  input_tokens: number
+  output_tokens: number
+  cache_creation_tokens: number
+  cache_read_tokens: number
+  total_tokens: number
+  cost: number
+  actual_cost: number
+}
+
+export interface Sub2ApiModelStat {
+  model: string
+  requests: number
+  input_tokens: number
+  output_tokens: number
+  cache_creation_tokens: number
+  cache_read_tokens: number
+  total_tokens: number
+  cost: number
+  actual_cost: number
+}
+
+export interface Sub2ApiUsageLog {
+  id: number
+  user_id: number
+  api_key_id: number
+  account_id: number | null
+  request_id: string
+  model: string
+  service_tier?: string | null
+  reasoning_effort?: string | null
+  inbound_endpoint?: string | null
+  upstream_endpoint?: string | null
+  group_id: number | null
+  subscription_id: number | null
+  input_tokens: number
+  output_tokens: number
+  cache_creation_tokens: number
+  cache_read_tokens: number
+  cache_creation_5m_tokens: number
+  cache_creation_1h_tokens: number
+  input_cost: number
+  output_cost: number
+  cache_creation_cost: number
+  cache_read_cost: number
+  total_cost: number
+  actual_cost: number
+  rate_multiplier: number
+  long_context_billing_applied: boolean
+  billing_type: number
+  request_type?: 'unknown' | 'sync' | 'stream' | 'ws_v2' | 'cyber' | 'live'
+  stream: boolean
+  openai_ws_mode?: boolean
+  duration_ms: number | null
+  first_token_ms: number | null
+  image_count: number
+  image_size: string | null
+  image_input_size: string | null
+  image_output_size: string | null
+  image_size_source: 'output' | 'input' | 'default' | 'legacy' | null
+  image_size_breakdown: Record<string, number> | null
+  image_input_tokens: number
+  image_input_cost: number
+  image_output_tokens: number
+  image_output_cost: number
+  media_type?: string | null
+  user_agent: string | null
+  ip_address?: string | null
+  session_id?: string | null
+  cache_ttl_overridden: boolean
+  billing_mode?: string | null
+  created_at: string
+  user?: Sub2ApiUser
+  api_key?: Sub2ApiApiKey
+  group?: {
+    id: number
+    name: string
+    platform: string
+  }
+}
+
+export interface Sub2ApiDashboardQuery {
+  start_date?: string
+  end_date?: string
+  granularity?: 'day' | 'hour'
+  timezone?: string
+}
+
+export interface Sub2ApiDashboardTrendResponse {
+  trend: Sub2ApiTrendPoint[]
+  start_date: string
+  end_date: string
+  granularity: string
+}
+
+export interface Sub2ApiDashboardModelsResponse {
+  models: Sub2ApiModelStat[]
+  start_date: string
+  end_date: string
+}
+
+export interface Sub2ApiUsagePage {
+  items: Sub2ApiUsageLog[]
+  total: number
+  page: number
+  page_size: number
+  pages: number
 }
 
 export interface Sub2ApiPublicSettings {
@@ -96,15 +317,6 @@ function normalizeBaseUrl(value: string) {
 
 export function getSub2ApiAuthBaseUrl() {
   return normalizeBaseUrl(import.meta.env.VITE_SUB2API_AUTH_URL ?? '')
-}
-
-export function getSub2ApiConsoleUrl() {
-  const configured = import.meta.env.VITE_SUB2API_CONSOLE_URL?.trim()
-  if (configured) return configured.replace(/\/+$/, '')
-
-  const authBaseUrl = getSub2ApiAuthBaseUrl()
-  if (!/^https?:\/\//i.test(authBaseUrl)) return null
-  return authBaseUrl.replace(/\/api\/v1$/i, '')
 }
 
 export function getSub2ApiGatewayBaseUrl() {
@@ -288,22 +500,84 @@ export async function refreshSub2ApiSession() {
   return refreshRequest
 }
 
-export async function getCurrentSub2ApiUser() {
+async function requestWithSessionRefresh<T>(path: string, init: RequestInit = {}) {
   try {
-    const response = await requestRaw<Sub2ApiUser>('/auth/me')
-    const storage = getActiveStorage()
-    if (storage) storage.setItem(USER_KEY, JSON.stringify(response))
-    return response
+    return await requestRaw<T>(path, init)
   } catch (error) {
     const status = (error as { status?: number }).status
     if (status !== 401 || !getSub2ApiRefreshToken()) throw error
 
     await refreshSub2ApiSession()
-    const response = await requestRaw<Sub2ApiUser>('/auth/me')
-    const storage = getActiveStorage()
-    if (storage) storage.setItem(USER_KEY, JSON.stringify(response))
-    return response
+    return requestRaw<T>(path, init)
   }
+}
+
+function getDashboardQuery(params: Sub2ApiDashboardQuery) {
+  const query = new URLSearchParams()
+  if (params.start_date) query.set('start_date', params.start_date)
+  if (params.end_date) query.set('end_date', params.end_date)
+  if (params.granularity) query.set('granularity', params.granularity)
+  if (params.timezone) query.set('timezone', params.timezone)
+  const value = query.toString()
+  return value ? `?${value}` : ''
+}
+
+function saveSub2ApiUser(user: Sub2ApiUser) {
+  const storage = getActiveStorage()
+  if (storage) storage.setItem(USER_KEY, JSON.stringify(user))
+}
+
+export async function getCurrentSub2ApiUser() {
+  const response = await requestWithSessionRefresh<Sub2ApiUser>('/auth/me')
+  saveSub2ApiUser(response)
+  return response
+}
+
+export async function getSub2ApiProfile() {
+  const response = await requestWithSessionRefresh<Sub2ApiUser>('/user/profile', { method: 'GET' })
+  saveSub2ApiUser(response)
+  return response
+}
+
+export async function getSub2ApiDashboardStats() {
+  return requestWithSessionRefresh<Sub2ApiDashboardStats>('/usage/dashboard/stats', { method: 'GET' })
+}
+
+export async function getSub2ApiDashboardTrend(params: Sub2ApiDashboardQuery = {}) {
+  return requestWithSessionRefresh<Sub2ApiDashboardTrendResponse>(
+    `/usage/dashboard/trend${getDashboardQuery(params)}`,
+    { method: 'GET' },
+  )
+}
+
+export async function getSub2ApiDashboardModels(params: Sub2ApiDashboardQuery = {}) {
+  return requestWithSessionRefresh<Sub2ApiDashboardModelsResponse>(
+    `/usage/dashboard/models${getDashboardQuery(params)}`,
+    { method: 'GET' },
+  )
+}
+
+export async function listRecentSub2ApiUsage() {
+  return requestWithSessionRefresh<Sub2ApiUsagePage>(
+    '/usage?page=1&page_size=5&sort_by=created_at&sort_order=desc',
+    { method: 'GET' },
+  )
+}
+
+export async function updateSub2ApiProfile(input: Sub2ApiProfileUpdateInput) {
+  const response = await requestWithSessionRefresh<Sub2ApiUser>('/user', {
+    method: 'PUT',
+    body: JSON.stringify(input),
+  })
+  saveSub2ApiUser(response)
+  return response
+}
+
+export async function changeSub2ApiPassword(input: Sub2ApiPasswordChangeInput) {
+  return requestWithSessionRefresh<{ message: string }>('/user/password', {
+    method: 'PUT',
+    body: JSON.stringify(input),
+  })
 }
 
 export async function logoutSub2Api() {
@@ -339,11 +613,11 @@ export async function getSub2ApiPublicSettings() {
 }
 
 export async function listSub2ApiKeys() {
-  return requestRaw<{ items?: Sub2ApiApiKey[] }>('/keys?page=1&page_size=20')
+  return requestWithSessionRefresh<{ items?: Sub2ApiApiKey[] }>('/keys?page=1&page_size=20')
 }
 
 export async function createSub2ApiKey(name = 'GPT Image 2 For TJH') {
-  return requestRaw<Sub2ApiApiKey>('/keys', {
+  return requestWithSessionRefresh<Sub2ApiApiKey>('/keys', {
     method: 'POST',
     body: JSON.stringify({ name }),
   })

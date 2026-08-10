@@ -75,7 +75,19 @@ function createResponseHeaders(request: Request, upstreamHeaders: Headers) {
 async function handleProxy({ request, env, params }: PagesFunctionContext) {
   const path = getPath(params)
   if (!path) return jsonResponse(request, 403, 'Sub2API auth path is required.')
-  if (path !== 'settings/public' && path !== 'keys' && !path.startsWith('keys/') && !path.startsWith('auth/')) {
+  if (
+    path !== 'settings/public' &&
+    path !== 'keys' &&
+    path !== 'user/profile' &&
+    path !== 'user' &&
+    path !== 'user/password' &&
+    path !== 'usage' &&
+    path !== 'usage/dashboard/stats' &&
+    path !== 'usage/dashboard/trend' &&
+    path !== 'usage/dashboard/models' &&
+    !path.startsWith('keys/') &&
+    !path.startsWith('auth/')
+  ) {
     return jsonResponse(request, 403, 'Sub2API auth path is not allowed.')
   }
 

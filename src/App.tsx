@@ -3,7 +3,7 @@ import { initStore } from './store'
 import { useStore } from './store'
 import { activateFirstImportedProfile, buildSettingsFromUrlParams, clearUrlSettingParams, hasUrlSettingParams } from './lib/urlSettings'
 import { getActiveApiProfile, isDefaultConfigOnlyEnabled, mergeImportedSettings, normalizeSettings } from './lib/apiProfiles'
-import { ensureSub2ApiImageKey, getSub2ApiConsoleUrl, getSub2ApiGatewayBaseUrl, getSub2ApiSession } from './lib/sub2apiAuth'
+import { ensureSub2ApiImageKey, getSub2ApiGatewayBaseUrl, getSub2ApiSession } from './lib/sub2apiAuth'
 import { useSub2ApiAuth } from './hooks/useSub2ApiAuth'
 import { getCustomProviderConfigUrl, loadCustomProviderSettingsFromUrl } from './lib/customProviderConfigUrl'
 import { useDockerApiUrlMigrationNotice } from './hooks/useDockerApiUrlMigrationNotice'
@@ -22,6 +22,7 @@ import MaskEditorModal from './components/MaskEditorModal'
 import ImageContextMenu from './components/ImageContextMenu'
 import SupportPromptModal from './components/SupportPromptModal'
 import LandingAuthModal, { type LandingAuthMode } from './components/LandingAuthModal'
+import UserConsole from './components/UserConsole'
 import { FavoriteCollectionPickerModal, FavoriteCollectionsView, ManageCollectionsModal } from './components/FavoriteCollections'
 import { useGlobalClickSuppression } from './lib/clickSuppression'
 
@@ -80,18 +81,51 @@ export default function App() {
   const [landingAuthMode, setLandingAuthMode] = useState<LandingAuthMode | null>(null)
   const [staticBackgroundManualOffset, setStaticBackgroundManualOffset] = useState(0)
   const [staticBackgroundImages, setStaticBackgroundImages] = useState<string[]>([DEFAULT_STATIC_BACKGROUND_URL])
+  const [showUserConsole, setShowUserConsole] = useState(() => window.location.hash === '#console')
   const dynamicBackgroundVideoRef = useRef<HTMLVideoElement>(null)
   const apiKeySyncStarted = useRef(false)
   const sub2ApiAuth = useSub2ApiAuth()
   const staticBackgroundUrl = staticBackgroundImages[staticBackgroundManualOffset % staticBackgroundImages.length] ?? DEFAULT_STATIC_BACKGROUND_URL
-  const showDynamicBackground = hasEnteredExperience && dynamicBackgroundEnabled
+  const showDynamicBackground = hasEnteredExperience && dynamicBackgroundEnabled && !showUserConsole
   const openSub2ApiConsole = () => {
-    const consoleUrl = getSub2ApiConsoleUrl()
-    if (!consoleUrl) return
-    window.open(consoleUrl, '_blank', 'noopener,noreferrer')
+    if (window.location.hash !== '#console') {
+      window.history.pushState({ ...window.history.state, gptImageView: 'console' }, '', '#console')
+    }
+    setShowUserConsole(true)
+  }
+  const clearSub2ApiConsoleRoute = () => {
+    const state = { ...window.history.state }
+    delete state.gptImageView
+    window.history.replaceState(state, '', `${window.location.pathname}${window.location.search}`)
+  }
+  const closeSub2ApiConsole = () => {
+    if (window.history.state?.gptImageView === 'console') {
+      window.history.back()
+      return
+    }
+
+    clearSub2ApiConsoleRoute()
+    setShowUserConsole(false)
+  }
+  const handleLogout = () => {
+    clearSub2ApiConsoleRoute()
+    setShowUserConsole(false)
+    void sub2ApiAuth.logout().catch((error) => {
+      console.warn('退出 Sub2API 登录失败：', error)
+    })
   }
   useDockerApiUrlMigrationNotice()
   useGlobalClickSuppression()
+
+  useEffect(() => {
+    const syncConsoleRoute = () => setShowUserConsole(window.location.hash === '#console')
+    window.addEventListener('hashchange', syncConsoleRoute)
+    window.addEventListener('popstate', syncConsoleRoute)
+    return () => {
+      window.removeEventListener('hashchange', syncConsoleRoute)
+      window.removeEventListener('popstate', syncConsoleRoute)
+    }
+  }, [])
 
   useEffect(() => {
     if (sub2ApiAuth.isAuthenticated) {
@@ -345,44 +379,51 @@ export default function App() {
           </main>
         ) : (
           <>
-            <Header
-              dynamicBackgroundEnabled={dynamicBackgroundEnabled}
-              onToggleDynamicBackground={() => setDynamicBackgroundEnabled((enabled) => !enabled)}
-              staticBackgroundCount={staticBackgroundImages.length}
-              onNextStaticBackground={() => setStaticBackgroundManualOffset((offset) => offset + 1)}
-              authUser={sub2ApiAuth.user}
-              onOpenConsole={openSub2ApiConsole}
-              onLogout={sub2ApiAuth.isAuthenticated ? () => {
-                void sub2ApiAuth.logout().catch((error) => {
-                  console.warn('退出 Sub2API 登录失败：', error)
-                })
-              } : undefined}
-            />
-            {appMode === 'agent' ? (
-              <AgentWorkspace />
+            {showUserConsole && sub2ApiAuth.user ? (
+              <UserConsole
+                user={sub2ApiAuth.user}
+                onUserChange={sub2ApiAuth.sync}
+                onClose={closeSub2ApiConsole}
+                onLogout={handleLogout}
+              />
             ) : (
-              <main
-                data-home-main
-                data-drag-select-surface
-                className="pb-[calc(var(--input-bar-clearance,12rem)+var(--task-grid-bottom-clearance,2rem))]"
-              >
-                <div className="safe-area-x max-w-7xl mx-auto">
-                  <SearchBar />
-                  {filterFavorite && !activeFavoriteCollectionId ? <FavoriteCollectionsView /> : <TaskGrid />}
-                </div>
-              </main>
+              <>
+                <Header
+                  dynamicBackgroundEnabled={dynamicBackgroundEnabled}
+                  onToggleDynamicBackground={() => setDynamicBackgroundEnabled((enabled) => !enabled)}
+                  staticBackgroundCount={staticBackgroundImages.length}
+                  onNextStaticBackground={() => setStaticBackgroundManualOffset((offset) => offset + 1)}
+                  authUser={sub2ApiAuth.user}
+                  onOpenConsole={openSub2ApiConsole}
+                  onLogout={sub2ApiAuth.isAuthenticated ? handleLogout : undefined}
+                />
+                {appMode === 'agent' ? (
+                  <AgentWorkspace />
+                ) : (
+                  <main
+                    data-home-main
+                    data-drag-select-surface
+                    className="pb-[calc(var(--input-bar-clearance,12rem)+var(--task-grid-bottom-clearance,2rem))]"
+                  >
+                    <div className="safe-area-x max-w-7xl mx-auto">
+                      <SearchBar />
+                      {filterFavorite && !activeFavoriteCollectionId ? <FavoriteCollectionsView /> : <TaskGrid />}
+                    </div>
+                  </main>
+                )}
+                <InputBar />
+                <DetailModal />
+                <Lightbox />
+                <SupportPromptModal />
+                <FavoriteCollectionPickerModal />
+                <ManageCollectionsModal />
+                <MaskEditorModal />
+                <ImageContextMenu />
+              </>
             )}
-            <InputBar />
-            <DetailModal />
-            <Lightbox />
             <SettingsModal />
             <ConfirmDialog />
-            <SupportPromptModal />
-            <FavoriteCollectionPickerModal />
-            <ManageCollectionsModal />
             <Toast />
-            <MaskEditorModal />
-            <ImageContextMenu />
           </>
         )}
       </div>
