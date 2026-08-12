@@ -3,19 +3,23 @@ import {
   changeSub2ApiPassword,
   clearSub2ApiSession,
   createSub2ApiKey,
+  deleteSub2ApiKey,
   ensureSub2ApiImageKey,
   getCurrentSub2ApiUser,
   getSub2ApiDashboardModels,
   getSub2ApiDashboardStats,
   getSub2ApiDashboardTrend,
+  getSub2ApiKeysUsage,
   getSub2ApiProfile,
   getSub2ApiPublicSettings,
   getSub2ApiSession,
+  listSub2ApiGroups,
   listRecentSub2ApiUsage,
   listSub2ApiKeys,
   loginSub2Api,
   logoutSub2Api,
   requestSub2ApiPasswordReset,
+  updateSub2ApiKey,
   updateSub2ApiProfile,
 } from './sub2apiAuth'
 
@@ -379,9 +383,12 @@ describe('sub2apiAuth', () => {
       pageSize: 10,
       search: '工作台 key',
       status: 'active',
+      groupId: 6,
+      sortBy: 'current_concurrency',
+      sortOrder: 'desc',
     })).resolves.toEqual(page)
     expect(fetchMock.mock.calls[0]?.[0]).toBe(
-      'https://auth.example.com/api/v1/keys?page=3&page_size=10&search=%E5%B7%A5%E4%BD%9C%E5%8F%B0+key&status=active',
+      'https://auth.example.com/api/v1/keys?page=3&page_size=10&search=%E5%B7%A5%E4%BD%9C%E5%8F%B0+key&status=active&group_id=6&sort_by=current_concurrency&sort_order=desc',
     )
     const request = fetchMock.mock.calls[0]?.[1] as RequestInit
     expect(request.method ?? 'GET').toBe('GET')
@@ -412,6 +419,78 @@ describe('sub2apiAuth', () => {
     expect(headers.get('Authorization')).toBe('Bearer access-token')
     expect(headers.get('Accept')).toBe('application/json')
     expect(headers.get('Content-Type')).toBe('application/json')
+  })
+
+  it('updates an API key with Sub2API quota and access policy fields', async () => {
+    window.sessionStorage.setItem('sub2api_access_token', 'access-token')
+    const key = { id: 3, key: 'sk-workbench', name: '生产密钥', status: 'active', group_id: 6 }
+    const input = {
+      name: '生产密钥',
+      group_id: 6,
+      quota: 25,
+      expires_at: '2026-12-31T16:00:00.000Z',
+      ip_whitelist: ['203.0.113.8'],
+      ip_blacklist: [],
+      rate_limit_5h: 2,
+      rate_limit_1d: 5,
+      rate_limit_7d: 20,
+    }
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse({ code: 0, data: key }))
+
+    await expect(updateSub2ApiKey(3, input)).resolves.toEqual(key)
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://auth.example.com/api/v1/keys/3',
+      expect.objectContaining({
+        method: 'PUT',
+        body: JSON.stringify(input),
+        credentials: 'include',
+      }),
+    )
+  })
+
+  it('deletes an API key through the official key endpoint', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse({
+      code: 0,
+      data: { message: 'deleted' },
+    }))
+
+    await expect(deleteSub2ApiKey(9)).resolves.toEqual({ message: 'deleted' })
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://auth.example.com/api/v1/keys/9',
+      expect.objectContaining({ method: 'DELETE', credentials: 'include' }),
+    )
+  })
+
+  it('loads the API key groups available to the current user', async () => {
+    vi.stubEnv('VITE_SUB2API_AUTH_PROXY', 'true')
+    const groups = [{ id: 6, name: 'OpenAI 标准组', platform: 'openai', rate_multiplier: 1 }]
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse({ code: 0, data: groups }))
+
+    await expect(listSub2ApiGroups()).resolves.toEqual(groups)
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/sub2api-auth/groups/available',
+      expect.objectContaining({ credentials: 'include' }),
+    )
+  })
+
+  it('loads batched API key usage for the current page', async () => {
+    const usage = {
+      stats: {
+        3: { api_key_id: 3, today_actual_cost: 0.12, total_actual_cost: 2.45 },
+        9: { api_key_id: 9, today_actual_cost: 0, total_actual_cost: 0.8 },
+      },
+    }
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse({ code: 0, data: usage }))
+
+    await expect(getSub2ApiKeysUsage([3, 9])).resolves.toEqual(usage)
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://auth.example.com/api/v1/usage/dashboard/api-keys-usage',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ api_key_ids: [3, 9] }),
+        credentials: 'include',
+      }),
+    )
   })
 
   it('creates an OmniMuse API key when no active key exists', async () => {

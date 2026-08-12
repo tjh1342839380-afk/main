@@ -81,10 +81,12 @@ async function handleProxy({ request, env, params }: PagesFunctionContext) {
     path !== 'user/profile' &&
     path !== 'user' &&
     path !== 'user/password' &&
+    path !== 'groups/available' &&
     path !== 'usage' &&
     path !== 'usage/dashboard/stats' &&
     path !== 'usage/dashboard/trend' &&
     path !== 'usage/dashboard/models' &&
+    path !== 'usage/dashboard/api-keys-usage' &&
     !path.startsWith('keys/') &&
     !path.startsWith('auth/')
   ) {

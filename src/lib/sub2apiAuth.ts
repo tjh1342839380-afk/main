@@ -123,6 +123,71 @@ export interface Sub2ApiApiKey {
   key: string
   name: string
   status: string
+  user_id?: number
+  group_id?: number | null
+  group?: Sub2ApiGroup
+  current_concurrency?: number
+  quota?: number
+  quota_used?: number
+  expires_at?: string | null
+  created_at?: string
+  updated_at?: string
+  last_used_at?: string | null
+  last_used_ip?: string | null
+  ip_whitelist?: string[]
+  ip_blacklist?: string[]
+  rate_limit_5h?: number
+  rate_limit_1d?: number
+  rate_limit_7d?: number
+  usage_5h?: number
+  usage_1d?: number
+  usage_7d?: number
+  reset_5h_at?: string | null
+  reset_1d_at?: string | null
+  reset_7d_at?: string | null
+}
+
+export interface Sub2ApiGroup {
+  id: number
+  name: string
+  description?: string | null
+  platform?: string
+  rate_multiplier?: number
+  status?: string
+  subscription_type?: string
+}
+
+export interface Sub2ApiCustomEndpoint {
+  name: string
+  endpoint: string
+  description?: string
+}
+
+export interface Sub2ApiApiKeyCreateInput {
+  name: string
+  group_id?: number | null
+  quota?: number
+  expires_in_days?: number
+  ip_whitelist?: string[]
+  ip_blacklist?: string[]
+  rate_limit_5h?: number
+  rate_limit_1d?: number
+  rate_limit_7d?: number
+}
+
+export interface Sub2ApiApiKeyUpdateInput {
+  name?: string
+  group_id?: number | null
+  status?: 'active' | 'inactive'
+  quota?: number
+  expires_at?: string | null
+  ip_whitelist?: string[]
+  ip_blacklist?: string[]
+  rate_limit_5h?: number
+  rate_limit_1d?: number
+  rate_limit_7d?: number
+  reset_quota?: boolean
+  reset_rate_limit_usage?: boolean
 }
 
 export interface Sub2ApiApiKeyListOptions {
@@ -130,6 +195,9 @@ export interface Sub2ApiApiKeyListOptions {
   pageSize?: number
   search?: string
   status?: string
+  groupId?: number
+  sortBy?: 'created_at' | 'name' | 'current_concurrency' | 'expires_at'
+  sortOrder?: 'asc' | 'desc'
 }
 
 export interface Sub2ApiApiKeyListResult {
@@ -289,6 +357,19 @@ export interface Sub2ApiPublicSettings {
   email_verify_enabled: boolean
   invitation_code_enabled: boolean
   password_reset_enabled: boolean
+  api_base_url?: string
+  custom_endpoints?: Sub2ApiCustomEndpoint[]
+  site_name?: string
+}
+
+export interface Sub2ApiApiKeyUsageStat {
+  api_key_id: number
+  today_actual_cost: number
+  total_actual_cost: number
+}
+
+export interface Sub2ApiApiKeysUsageResult {
+  stats: Record<string, Sub2ApiApiKeyUsageStat>
 }
 
 interface ApiEnvelope<T> {
@@ -637,13 +718,42 @@ export async function listSub2ApiKeys(options: Sub2ApiApiKeyListOptions = {}) {
   const search = options.search?.trim()
   if (search) params.set('search', search)
   if (options.status) params.set('status', options.status)
+  if (options.groupId !== undefined) params.set('group_id', String(options.groupId))
+  if (options.sortBy) params.set('sort_by', options.sortBy)
+  if (options.sortOrder) params.set('sort_order', options.sortOrder)
   return requestWithSessionRefresh<Sub2ApiApiKeyListResult>(`/keys?${params.toString()}`)
 }
 
-export async function createSub2ApiKey(name = APP_SHORT_NAME) {
+export async function createSub2ApiKey(input: string | Sub2ApiApiKeyCreateInput = APP_SHORT_NAME) {
+  const payload = typeof input === 'string' ? { name: input } : input
   return requestWithSessionRefresh<Sub2ApiApiKey>('/keys', {
     method: 'POST',
-    body: JSON.stringify({ name }),
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function updateSub2ApiKey(id: number, input: Sub2ApiApiKeyUpdateInput) {
+  return requestWithSessionRefresh<Sub2ApiApiKey>(`/keys/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(input),
+  })
+}
+
+export async function deleteSub2ApiKey(id: number) {
+  return requestWithSessionRefresh<{ message?: string }>(`/keys/${id}`, {
+    method: 'DELETE',
+  })
+}
+
+export async function listSub2ApiGroups() {
+  return requestWithSessionRefresh<Sub2ApiGroup[]>('/groups/available')
+}
+
+export async function getSub2ApiKeysUsage(ids: number[]) {
+  if (ids.length === 0) return { stats: {} }
+  return requestWithSessionRefresh<Sub2ApiApiKeysUsageResult>('/usage/dashboard/api-keys-usage', {
+    method: 'POST',
+    body: JSON.stringify({ api_key_ids: ids }),
   })
 }
 

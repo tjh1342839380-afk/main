@@ -206,6 +206,15 @@ export function RefreshIcon(props: SVGProps<SVGSVGElement>) {
   )
 }
 
+export function PowerIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" {...props}>
+      <path d="M12 3v9" strokeWidth="2" strokeLinecap="round" />
+      <path d="M6.36 6.36a8 8 0 1011.28 0" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  )
+}
+
 export function CodeIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" {...props}>

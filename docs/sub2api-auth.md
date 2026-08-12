@@ -18,7 +18,7 @@ VITE_SUB2API_AUTO_CONFIGURE=true
 
 ## 项目内用户控制台
 
-登录后的账户菜单会在当前站点打开 `#console`，展示账户概览、用量仪表盘、API 密钥管理、个人资料和应用设置入口。API 密钥页通过 Sub2API 官方接口提供密钥搜索、状态筛选、创建、安全复制和刷新；用量仪表盘展示余额、请求与 Token 消耗、模型分布、趋势和最近调用记录。控制台不会再根据 `VITE_SUB2API_AUTH_URL` 推导或跳转到第三方 Sub2API 网站。
+登录后的账户菜单会在当前站点打开 `#console`，展示账户概览、用量仪表盘、API 密钥管理、个人资料和应用设置入口。API 密钥页通过 Sub2API 官方接口提供名称搜索、分组与状态筛选、端点复制、创建、编辑、启停和删除，并展示分组、并发、用量、额度、到期时间及最近使用记录；用量仪表盘展示余额、请求与 Token 消耗、模型分布、趋势和最近调用记录。控制台不会再根据 `VITE_SUB2API_AUTH_URL` 推导或跳转到第三方 Sub2API 网站。
 
 这个页面是本项目自己的用户控制台前端，账户和 API Key 数据仍通过同源 `/sub2api-auth/*` 代理读取配置的 Sub2API 服务。若需要完全自有的后台服务，需要把 Sub2API、PostgreSQL 和 Redis 部署到自己的服务器与域名，再更新 `VITE_DEFAULT_API_URL`、`VITE_SUB2API_AUTH_URL` 和服务端 `SUB2API_AUTH_URL`。官方 Sub2API 自带完整用户与管理控制台，自托管后的用户首页路由为 `/dashboard`。
 
@@ -30,7 +30,7 @@ VITE_SUB2API_AUTO_CONFIGURE=true
 SUB2API_AUTH_URL=https://sub2api.example.com/api/v1
 ```
 
-代理只允许 `/auth/*`、`/keys*`、只读的 `/settings/public`，精确匹配的 `/user/profile`、`/user`、`/user/password`，以及仪表盘所需的 `/usage`、`/usage/dashboard/stats`、`/usage/dashboard/trend`、`/usage/dashboard/models` 路径，不接受浏览器传入动态目标地址。个人资料页通过用户路径读取和更新资料、修改密码；注册页通过公开设置同步邮箱验证和邀请码开关。
+代理只允许 `/auth/*`、`/keys*`、只读的 `/settings/public` 和 `/groups/available`，精确匹配的 `/user/profile`、`/user`、`/user/password`，以及仪表盘与密钥列表所需的 `/usage`、`/usage/dashboard/stats`、`/usage/dashboard/trend`、`/usage/dashboard/models`、`/usage/dashboard/api-keys-usage` 路径，不接受浏览器传入动态目标地址。个人资料页通过用户路径读取和更新资料、修改密码；注册页通过公开设置同步邮箱验证和邀请码开关。
 
 ## 邮箱验证码
 
